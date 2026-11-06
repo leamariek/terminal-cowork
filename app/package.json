@@ -1,1 +1,1 @@
-{ "name": "cowork", "productName": "Cowork", "version": "0.2.0", "main": "main.cjs", "description": "Terminal and browser in one window." }
+{ "name": "terminal-cowork", "productName": "terminal-cowork", "version": "0.2.0", "main": "main.cjs", "description": "Terminal and browser in one window." }

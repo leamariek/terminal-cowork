@@ -16,5 +16,5 @@ writeFileSync(resolve(root, 'app/config.json'), JSON.stringify({
   runtime: `/run/user/${uid}`,
   sock: `/run/user/${uid}/cowork.sock`,
 }, null, 2));
-const [out] = await packager({ dir: resolve(root, 'app'), out: resolve(root, 'dist'), name: 'Cowork', platform: 'win32', arch: 'x64', overwrite: true, asar: false, icon: resolve(root, 'app/icon.ico'), electronVersion: JSON.parse(execFileSync('npm', ['pkg', 'get', 'version'], { cwd: resolve(root, 'node_modules/electron'), encoding: 'utf8' })) });
+const [out] = await packager({ dir: resolve(root, 'app'), out: resolve(root, 'dist'), name: 'terminal-cowork', platform: 'win32', arch: 'x64', overwrite: true, asar: false, icon: resolve(root, 'app/icon.ico'), electronVersion: JSON.parse(execFileSync('npm', ['pkg', 'get', 'version'], { cwd: resolve(root, 'node_modules/electron'), encoding: 'utf8' })) });
 console.log(out);

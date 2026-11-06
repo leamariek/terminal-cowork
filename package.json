@@ -1,7 +1,7 @@
 {
   "name": "terminal-cowork",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Claude Code on the left, a shared Chrome and previews on the right, in one terminal tab.",
   "bin": {

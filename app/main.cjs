@@ -35,7 +35,7 @@ function startBackend() {
   readline.createInterface({ input: backend.stdout }).on('line', (line) => {
     try { onBackend(line); } catch (e) { note(`bad line: ${line.slice(0, 300)} ${e.message}`); }
   });
-  backend.on('exit', (code) => { note(`backend exited ${code}`); if (!app.isQuitting) ui('notice', 'The WSL side stopped. Reopen Cowork to continue.'); });
+  backend.on('exit', (code) => { note(`backend exited ${code}`); if (!app.isQuitting) ui('notice', 'The WSL side stopped. Reopen terminal-cowork to continue.'); });
 }
 
 const toBackend = (msg) => backend?.stdin.write(JSON.stringify(msg) + '\n');
@@ -281,7 +281,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1500, height: 940, minWidth: 900, minHeight: 560, show: false, frame: false,
     backgroundColor: '#fcfbfa',
-    title: 'Cowork', icon: path.join(__dirname, 'icon.png'),
+    title: 'terminal-cowork', icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: !TEST },
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault()); // The window's own page never navigates.
