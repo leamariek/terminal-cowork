@@ -2,44 +2,77 @@
 const { send, on } = window.cowork;
 const $ = (id) => document.getElementById(id);
 
-// ---- Terminal ----
+// ---- Terminals ----
 
-const term = new Terminal({
-  fontFamily: "'Cell Blocks', 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Segoe UI Symbol', monospace",
-  fontSize: 13,
-  lineHeight: 1,
-  cursorBlink: true,
-  cursorStyle: 'block',
-  scrollback: 20000,
-  allowProposedApi: true,
-  theme: {
-    background: '#fcfbfa', foreground: '#1d1d1f', cursor: '#1d1d1f', cursorAccent: '#fcfbfa', selectionBackground: '#b3d7ff',
-    black: '#1d1d1f', red: '#c8102e', green: '#1a7f37', yellow: '#946c00', blue: '#0060d6', magenta: '#8a3ffc', cyan: '#00798c', white: '#6e6e73',
-    brightBlack: '#8e8e93', brightRed: '#e0313e', brightGreen: '#2a9d4a', brightYellow: '#b58900', brightBlue: '#0a84ff', brightMagenta: '#a65ef0', brightCyan: '#0e93a8', brightWhite: '#aeaeb2',
-  },
-});
-const fit = new FitAddon.FitAddon();
-term.loadAddon(fit);
+const THEME = {
+  background: '#fcfbfa', foreground: '#1d1d1f', cursor: '#1d1d1f', cursorAccent: '#fcfbfa', selectionBackground: '#b3d7ff',
+  black: '#1d1d1f', red: '#c8102e', green: '#1a7f37', yellow: '#946c00', blue: '#0060d6', magenta: '#8a3ffc', cyan: '#00798c', white: '#6e6e73',
+  brightBlack: '#8e8e93', brightRed: '#e0313e', brightGreen: '#2a9d4a', brightYellow: '#b58900', brightBlue: '#0a84ff', brightMagenta: '#a65ef0', brightCyan: '#0e93a8', brightWhite: '#aeaeb2',
+};
+const terminals = new Map();
+let term = null; // The terminal in front.
+let termId = null;
+let agents = [];
 
-Promise.all([document.fonts.load("13px 'JetBrains Mono'"), document.fonts.load("13px 'Cell Blocks'", '\u2588')]).finally(() => {
-  term.open($('terminal'));
-  fit.fit();
-  term.focus();
-  send('ready', { cols: term.cols, rows: term.rows });
+function addTerminal({ id, kind, name }) {
+  const pane = document.createElement('div');
+  pane.className = 'term-pane';
+  $('terminal').append(pane);
+  const xterm = new Terminal({
+    fontFamily: "'Cell Blocks', 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Segoe UI Symbol', monospace",
+    fontSize: 13, lineHeight: 1, cursorBlink: true, cursorStyle: 'block', scrollback: 20000, allowProposedApi: true, theme: THEME,
+  });
+  const fit = new FitAddon.FitAddon();
+  xterm.loadAddon(fit);
+  xterm.open(pane);
+  xterm.onData((d) => send('input', { id, d }));
+  xterm.onResize((s) => send('resize', { id, ...s }));
+  xterm.attachCustomKeyEventHandler((e) => {
+    if (e.type !== 'keydown' || !e.ctrlKey) return true;
+    if (e.key === 'c' && xterm.hasSelection()) { send('copy', xterm.getSelection()); xterm.clearSelection(); return false; }
+    if (e.key === 'v') { send('paste'); return false; }
+    if (e.shiftKey && e.key.toLowerCase() === 't') { send('termNew', 'claude'); return false; }
+    return true;
+  });
+  terminals.set(id, { id, kind, name, xterm, fit, pane });
+  showTerminal(id);
+}
+
+function showTerminal(id) {
+  const t = terminals.get(id);
+  if (!t) return;
+  closeBoard();
+  termId = id;
+  term = t.xterm;
+  send('termFocus', id);
+  for (const x of terminals.values()) x.pane.classList.toggle('current', x.id === id);
+  t.fit.fit();
+  t.xterm.focus();
+  renderTerminals();
+}
+
+function removeTerminal(id) {
+  const t = terminals.get(id);
+  if (!t) return;
+  t.xterm.dispose();
+  t.pane.remove();
+  terminals.delete(id);
+  if (termId === id) { const next = [...terminals.keys()].at(-1); if (next !== undefined) showTerminal(next); else { term = null; termId = null; } }
+  renderTerminals();
+}
+
+const fitFront = () => { const t = terminals.get(termId); if (t) t.fit.fit(); };
+
+Promise.all([document.fonts.load("13px 'JetBrains Mono'"), document.fonts.load("13px 'Cell Blocks'", '█')]).finally(() => {
+  send('ready');
   reportBounds();
 });
 
-term.onData((d) => send('input', d));
-term.onResize((s) => send('resize', s));
-on('pty', (d) => term.write(d));
-on('pasted', (text) => term.paste(text));
-on('focusTerminal', () => term.focus());
-term.attachCustomKeyEventHandler((e) => {
-  if (e.type !== 'keydown' || !e.ctrlKey) return true;
-  if (e.key === 'c' && term.hasSelection()) { send('copy', term.getSelection()); term.clearSelection(); return false; }
-  if (e.key === 'v') { send('paste'); return false; }
-  return true;
-});
+on('termAdded', addTerminal);
+on('termClosed', ({ id }) => removeTerminal(id));
+on('pty', ({ id, d }) => terminals.get(id)?.xterm.write(d));
+on('pasted', (text) => term?.paste(text));
+on('focusTerminal', () => term?.focus());
 
 // ---- Layout ----
 
@@ -47,9 +80,9 @@ function reportBounds() {
   const r = $('stage').getBoundingClientRect();
   send('bounds', { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
 }
-new ResizeObserver(() => { reportBounds(); if (term.element) fit.fit(); }).observe(document.body);
+new ResizeObserver(() => { reportBounds(); fitFront(); }).observe(document.body);
 new ResizeObserver(reportBounds).observe($('stage'));
-new ResizeObserver(() => { if (term.element) fit.fit(); }).observe($('terminal'));
+new ResizeObserver(fitFront).observe($('terminal'));
 
 const divider = $('divider');
 divider.addEventListener('pointerdown', (e) => {
@@ -129,7 +162,7 @@ function render() {
   $('web-tabs').replaceChildren(...web.map(tabRow));
   $('preview-tabs').replaceChildren(...previews.map(tabRow));
   $('preview-group').hidden = previews.length === 0;
-  if (!window.cowork.plain) $('title').textContent = t?.title && t.title !== 'New Tab' ? t.title : 'Claude Code';
+  if (!window.cowork.plain && !document.body.classList.contains('board')) $('title').textContent = t?.title && t.title !== 'New Tab' ? t.title : 'Claude Code';
   showStatus(view.note);
 }
 
@@ -154,4 +187,103 @@ on('notice', (text) => {
 // ---- Sidebar ----
 
 $('toggle-sidebar').addEventListener('click', () => document.body.classList.toggle('collapsed'));
-$('row-terminal').addEventListener('click', () => term.focus());
+$('add-terminal').addEventListener('click', () => { $('add-menu').hidden = !$('add-menu').hidden; });
+$('add-menu').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { $('add-menu').hidden = true; send('termNew', b.dataset.kind); }));
+$('row-agents').addEventListener('click', () => (document.body.classList.contains('board') ? closeBoard() : openBoard()));
+
+const TERMINAL_ICON = '<svg viewBox="0 0 16 16"><path d="M3 4.5l3.5 3.5L3 11.5M8 12h5"/></svg>';
+const CLOSE_ICON = '<svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg>';
+const agentOf = (id) => agents.find((a) => a.id === id);
+
+function renderTerminals() {
+  const rows = [...terminals.values()].map((t) => {
+    const a = agentOf(t.id);
+    const el = document.createElement('div');
+    el.className = `row terminal${t.id === termId && !document.body.classList.contains('board') ? ' current' : ''}`;
+    el.innerHTML = TERMINAL_ICON;
+    el.addEventListener('click', () => showTerminal(t.id));
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = t.name;
+    el.append(name);
+    if (a) { const dot = document.createElement('i'); dot.className = `dot ${a.state}`; dot.title = LANES.find((l) => l.state === a.state)?.title ?? ''; el.append(dot); }
+    if (terminals.size > 1) {
+      const close = document.createElement('button');
+      close.setAttribute('aria-label', `Close ${t.name}`);
+      close.innerHTML = CLOSE_ICON;
+      close.addEventListener('click', (e) => { e.stopPropagation(); send('termClose', t.id); });
+      el.append(close);
+    }
+    return el;
+  });
+  $('term-list').replaceChildren(...rows);
+  const waiting = agents.filter((a) => a.state === 'needs').length;
+  const count = $('agents-count');
+  count.textContent = waiting || agents.filter((a) => a.state === 'working').length || '';
+  count.classList.toggle('alert', waiting > 0);
+  $('row-agents').classList.toggle('current', document.body.classList.contains('board'));
+}
+
+// ---- Agents board ----
+
+const LANES = [{ state: 'ready', title: 'Ready' }, { state: 'working', title: 'Working' }, { state: 'needs', title: 'Needs you' }, { state: 'done', title: 'Done' }];
+
+function elapsed(since) {
+  const s = Math.max(0, Math.round((Date.now() - since) / 1000));
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`;
+}
+
+function card(a) {
+  const el = document.createElement('button');
+  el.className = 'card';
+  el.addEventListener('click', () => showTerminal(a.id));
+  const line = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; return d; };
+  const head = line('head', a.name);
+  const time = document.createElement('span');
+  time.className = 'time';
+  time.textContent = elapsed(a.since);
+  head.append(time);
+  el.append(head, line('folder', a.folder));
+  if (a.prompt) el.append(line('prompt', a.prompt));
+  const more = a.subagents ? ` with ${a.subagents} subagent${a.subagents > 1 ? 's' : ''}` : '';
+  el.append(line('doing', `${a.activity}${more}`));
+  return el;
+}
+
+function renderBoard() {
+  if ($('board').hidden) return;
+  $('board').replaceChildren(...LANES.map(({ state, title }) => {
+    const lane = document.createElement('div');
+    lane.className = 'lane';
+    const inLane = agents.filter((a) => a.state === state);
+    const h = document.createElement('h3');
+    h.innerHTML = `<i class="dot ${state}"></i>`;
+    h.append(title);
+    const n = document.createElement('span');
+    n.textContent = inLane.length || '';
+    h.append(n);
+    lane.append(h, ...inLane.map(card));
+    return lane;
+  }));
+}
+
+function openBoard() {
+  document.body.classList.add('board');
+  $('board').hidden = false;
+  send('board', true);
+  renderBoard();
+  renderTerminals();
+  $('title').textContent = 'Agents';
+}
+
+function closeBoard() {
+  if (!document.body.classList.contains('board')) return;
+  document.body.classList.remove('board');
+  $('board').hidden = true;
+  send('board', false);
+  render();
+  fitFront();
+}
+
+on('agents', ({ list }) => { agents = list; renderTerminals(); renderBoard(); });
+setInterval(renderBoard, 1000);

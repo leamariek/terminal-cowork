@@ -9,6 +9,8 @@ You and Claude share the same browser. Claude opens pages, clicks, types and rea
 ## Features
 
 - **Real terminal:** a full WSL terminal that starts Claude Code for you.
+- **Several terminals:** add Claude Code sessions or plain shells from the sidebar. Each keeps running while you switch.
+- **Agents board:** a Kanban view of every Claude Code session, with Ready, Working, Needs you and Done columns, the last prompt and what it is doing now. It runs on Claude Code's own hook events.
 - **Real browser:** Chromium with tabs, logins that persist and popups that open as new tabs.
 - **Shared control:** 12 MCP tools let Claude open pages, read them, click, type, scroll, take screenshots and read console and network errors. A `cowork` command does the same from any WSL shell.
 - **Take control:** one button pauses Claude in the browser, for example during a login.
@@ -35,7 +37,14 @@ node scripts/vendor.mjs
 node scripts/package-windows.mjs
 ```
 
-Copy `dist/terminal-cowork-win32-x64` to a folder on your Windows drive and open `terminal-cowork.exe`. Keep the cloned folder in WSL, because the app starts its backend from there.
+Copy `dist/terminal-cowork-win32-x64` to `Apps\terminal-cowork` in your Windows user folder. Keep the cloned folder in WSL, because the app starts its backend from there.
+
+Then link the command and open the app from any folder:
+
+```sh
+ln -sf "$PWD/bin/terminal-cowork.js" ~/.local/bin/terminal-cowork
+terminal-cowork
+```
 
 The build is not code signed, so Windows SmartScreen may warn on first launch.
 
@@ -50,6 +59,8 @@ Inside the browser:
 | Ctrl+W | Close tab |
 | Ctrl+Tab | Next tab |
 | Ctrl+R | Reload |
+
+Inside a terminal, Ctrl+Shift+T starts a new Claude Code session.
 
 ## How it works
 

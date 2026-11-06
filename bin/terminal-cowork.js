@@ -1,19 +1,47 @@
 #!/usr/bin/env node
 // terminal-cowork: opens the app from any WSL terminal, in the folder you are in.
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { realpathSync } from 'node:fs';
 
 const root = resolve(dirname(realpathSync(fileURLToPath(import.meta.url))), '..');
-const exe = process.env.TERMINAL_COWORK_EXE ?? resolve(root, 'dist/terminal-cowork-win32-x64/terminal-cowork.exe');
-const [command, args] = process.env.TERMINAL_COWORK_ELECTRON
-  ? [process.env.TERMINAL_COWORK_ELECTRON, [resolve(root, 'app'), '--no-sandbox', ...(process.env.TERMINAL_COWORK_ARGS ?? '').split(' ').filter(Boolean)]]
-  : [exe, []];
-if (!process.env.TERMINAL_COWORK_ELECTRON && !existsSync(exe)) {
-  console.error(`App not found at ${exe}. Build it with node scripts/package-windows.mjs, or set TERMINAL_COWORK_EXE.`);
+
+// Filming and tests start the Linux build directly.
+if (process.env.TERMINAL_COWORK_ELECTRON) {
+  const args = [resolve(root, 'app'), '--no-sandbox', ...(process.env.TERMINAL_COWORK_ARGS ?? '').split(' ').filter(Boolean)];
+  spawn(process.env.TERMINAL_COWORK_ELECTRON, args, { detached: true, stdio: 'ignore', env: { ...process.env, COWORK_CWD: process.cwd() } }).unref();
+  console.log('Opening terminal-cowork');
+  process.exit(0);
+}
+
+// The app must run from the Windows drive: a GUI app started from the WSL disk does not open reliably.
+function findExe() {
+  if (process.env.TERMINAL_COWORK_EXE) return process.env.TERMINAL_COWORK_EXE;
+  const users = '/mnt/c/Users';
+  for (const user of existsSync(users) ? readdirSync(users) : []) {
+    const exe = join(users, user, 'Apps/terminal-cowork/terminal-cowork.exe');
+    if (existsSync(exe)) return exe;
+  }
+  return null;
+}
+
+const exe = findExe();
+if (!exe) {
+  console.error('terminal-cowork.exe was not found. Copy dist/terminal-cowork-win32-x64 to Apps/terminal-cowork in your Windows user folder, or set TERMINAL_COWORK_EXE.');
   process.exit(1);
 }
-spawn(command, args, { detached: true, stdio: 'ignore', env: { ...process.env, COWORK_CWD: process.cwd() } }).unref();
+
+const windowsPath = execFileSync('wslpath', ['-w', exe], { encoding: 'utf8' }).trim();
+// "start" hands the app to Windows and returns at once. Its first quoted argument is a window title.
+const args = ['/c', 'start', '', windowsPath, `--cwd=${process.cwd()}`];
+if (process.env.TERMINAL_COWORK_DRY) {
+  console.log(['cmd.exe', ...args].join(' '));
+  process.exit(0);
+}
+const result = spawnSync('cmd.exe', args, { cwd: dirname(exe), stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });
+if (result.error || result.status !== 0) {
+  console.error(`Could not open terminal-cowork: ${result.error?.message ?? result.stderr?.trim() ?? `exit code ${result.status}`}`);
+  process.exit(1);
+}
 console.log('Opening terminal-cowork');

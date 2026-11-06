@@ -19,16 +19,19 @@ let bounds = { x: 0, y: 0, width: 800, height: 600 };
 const tabs = [];
 let active = null;
 let nextTab = 1;
+let activeTerm = 1;
+let boardOpen = false;
 const state = { hold: false, picking: false, note: '', noteUntil: 0, picked: null, logs: [] };
 const current = () => tabs.find((t) => t.id === active);
 
 // ---- Backend ----
 
 function startBackend() {
+  const startFolder = process.argv.find((a) => a.startsWith('--cwd='))?.slice(6); // From the terminal-cowork command.
   const configFile = path.join(__dirname, 'config.json');
   const config = existsSync(configFile) ? JSON.parse(readFileSync(configFile, 'utf8')) : null;
   backend = process.platform === 'win32'
-    ? spawn('wsl.exe', ['-d', config.distro, '--cd', '~', '--', 'env', 'COWORK_WINDOWS=1', `PATH=${config.path}`, `COWORK_SOCK=${config.sock}`, `XDG_RUNTIME_DIR=${config.runtime}`, config.node, config.backend], { stdio: 'pipe', windowsHide: true })
+    ? spawn('wsl.exe', ['-d', config.distro, '--cd', '~', '--', 'env', 'COWORK_WINDOWS=1', ...(startFolder ? [`COWORK_CWD=${startFolder}`] : []), `PATH=${config.path}`, `COWORK_SOCK=${config.sock}`, `XDG_RUNTIME_DIR=${config.runtime}`, config.node, config.backend], { stdio: 'pipe', windowsHide: true })
     : spawn(process.env.COWORK_NODE ?? 'node', [path.join(__dirname, '../backend/server.js')], { stdio: 'pipe' });
   const logFile = path.join(app.getPath('userData'), 'backend.log');
   const note = (text) => { try { appendFileSync(logFile, `${new Date().toISOString()} ${text}\n`); } catch { /* Logging must never stop the app. */ } };
@@ -45,8 +48,7 @@ const ui = (channel, data) => { if (win && !win.isDestroyed()) win.webContents.s
 
 function onBackend(line) {
   const m = JSON.parse(line);
-  if (m.t === 'pty') ui('pty', m.d);
-  else if (m.t === 'ptyExit') ui('notice', 'The terminal session ended.');
+  if (m.t === 'pty' || m.t === 'termAdded' || m.t === 'termClosed' || m.t === 'agents') ui(m.t, m);
   else if (m.t === 'rpc') {
     const fn = agent[m.method];
     Promise.resolve()
@@ -76,7 +78,7 @@ function log(tab, level, text) {
 
 function layout() {
   for (const t of tabs) {
-    t.view.setVisible(t.id === active);
+    t.view.setVisible(t.id === active && !boardOpen);
     if (t.id === active) t.view.setBounds(bounds);
   }
 }
@@ -173,7 +175,7 @@ async function startPick() {
     // The element matters more than the picture, so a failed capture must not lose it.
     const image = await wc.capturePage().catch(() => null);
     state.picked = { ...picked, png: image?.toPNG().toString('base64') };
-    toBackend({ t: 'input', d: `(the element I pointed at: ${picked.selector}) ` });
+    toBackend({ t: 'input', id: activeTerm, d: `(the element I pointed at: ${picked.selector}) ` });
     ui('focusTerminal');
   }
   pushState();
@@ -300,12 +302,16 @@ function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
-ipcMain.on('ready', (_e, size) => {
+ipcMain.on('ready', () => {
   if (!tabs.length && !PLAIN) switchTo(newTab().id);
-  toBackend({ t: 'start', cols: size.cols, rows: size.rows });
+  toBackend({ t: 'start' });
 });
-ipcMain.on('input', (_e, d) => toBackend({ t: 'input', d }));
+ipcMain.on('input', (_e, m) => toBackend(typeof m === 'string' ? { t: 'input', id: activeTerm, d: m } : { t: 'input', ...m }));
 ipcMain.on('resize', (_e, s) => toBackend({ t: 'resize', ...s }));
+ipcMain.on('termNew', (_e, kind) => toBackend({ t: 'new', kind }));
+ipcMain.on('termClose', (_e, id) => toBackend({ t: 'close', id }));
+ipcMain.on('termFocus', (_e, id) => { activeTerm = id; });
+ipcMain.on('board', (_e, on) => { boardOpen = on; layout(); });
 ipcMain.on('bounds', (_e, b) => { bounds = b; layout(); });
 ipcMain.on('control', (_e, name) => {
   if (name === 'close') win.close();

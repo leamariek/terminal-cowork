@@ -17,8 +17,13 @@
   <button id="toggle-sidebar" aria-label="Show or hide the sidebar"><svg viewBox="0 0 18 16"><rect x="1.5" y="2" width="15" height="12" rx="3"/><path d="M6.5 2v12"/></svg></button>
 </div>
 <aside id="sidebar">
-  <h2>Terminal</h2>
-  <button id="row-terminal" class="row"><svg viewBox="0 0 16 16"><path d="M3 4.5l3.5 3.5L3 11.5M8 12h5"/></svg><span class="name">Claude Code</span></button>
+  <button id="row-agents" class="row"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="3.2" height="10" rx="1"/><rect x="6.4" y="3" width="3.2" height="6.5" rx="1"/><rect x="10.8" y="3" width="3.2" height="8" rx="1"/></svg><span class="name">Agents</span><span id="agents-count" class="count"></span></button>
+  <h2 class="with-action">Terminals<button id="add-terminal" aria-label="New terminal" aria-haspopup="menu"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button></h2>
+  <div id="add-menu" role="menu" hidden>
+    <button role="menuitem" data-kind="claude">Claude Code</button>
+    <button role="menuitem" data-kind="shell">Shell</button>
+  </div>
+  <div id="term-list"></div>
   <h2>Browser</h2>
   <div id="web-tabs"></div>
   <div id="preview-group" hidden>
@@ -52,6 +57,7 @@
     <div id="divider" role="separator" aria-orientation="vertical" aria-label="Resize panes"></div>
     <div id="stage"></div>
   </div>
+  <section id="board" aria-label="Agents" hidden></section>
   <footer id="status" role="status">Shared with Claude</footer>
 </main>
 <script src="vendor/xterm.js"></script>
