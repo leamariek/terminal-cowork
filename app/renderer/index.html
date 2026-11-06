@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:">
+<title>Cowork</title>
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="corner">
+  <div id="lights">
+    <button class="light close" data-control="close" aria-label="Close window"><svg viewBox="0 0 12 12"><path d="M3.8 3.8l4.4 4.4M8.2 3.8L3.8 8.2"/></svg></button>
+    <button class="light minimize" data-control="minimize" aria-label="Minimize window"><svg viewBox="0 0 12 12"><path d="M3 6h6"/></svg></button>
+    <button class="light zoom" data-control="zoom" aria-label="Zoom window"><svg viewBox="0 0 12 12"><path class="fill" d="M3.4 4.7v3.9h3.9zM8.6 7.3V3.4H4.7z"/></svg></button>
+  </div>
+  <button id="toggle-sidebar" aria-label="Show or hide the sidebar"><svg viewBox="0 0 18 16"><rect x="1.5" y="2" width="15" height="12" rx="3"/><path d="M6.5 2v12"/></svg></button>
+</div>
+<aside id="sidebar">
+  <h2>Terminal</h2>
+  <button id="row-terminal" class="row"><svg viewBox="0 0 16 16"><path d="M3 4.5l3.5 3.5L3 11.5M8 12h5"/></svg><span class="name">Claude Code</span></button>
+  <h2>Browser</h2>
+  <div id="web-tabs"></div>
+  <div id="preview-group" hidden>
+    <h2>Preview</h2>
+    <div id="preview-tabs"></div>
+  </div>
+</aside>
+<main id="main">
+  <header id="toolbar">
+    <div class="capsule pair">
+      <button id="back" aria-label="Back"><svg viewBox="0 0 16 16"><path d="M10 2.8L4.8 8l5.2 5.2"/></svg></button>
+      <i class="rule"></i>
+      <button id="forward" aria-label="Forward"><svg viewBox="0 0 16 16"><path d="M6 2.8L11.2 8 6 13.2"/></svg></button>
+    </div>
+    <h1 id="title">Claude Code</h1>
+    <form id="address-form" class="capsule">
+      <svg id="lock" viewBox="0 0 16 16"><path class="fill" d="M5 7V5a3 3 0 016 0v2h.6c.5 0 .9.4.9.9v4.7c0 .5-.4.9-.9.9H4.4a.9.9 0 01-.9-.9V7.9c0-.5.4-.9.9-.9zm1.2 0h3.6V5a1.8 1.8 0 00-3.6 0z"/></svg>
+      <input id="address" spellcheck="false" autocomplete="off" placeholder="Search or enter website name" aria-label="Address">
+      <button id="reload" type="button" aria-label="Reload page"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.5-3.6M13 2v3h-3"/></svg></button>
+      <div id="progress"></div>
+    </form>
+    <div class="capsule">
+      <button id="point" aria-label="Point at an element for Claude" title="Point at an element for Claude"><svg viewBox="0 0 16 16"><path d="M3.5 2.5l9 4-3.8 1.6-1.6 3.8z"/></svg><span>Point</span></button>
+      <i class="rule"></i>
+      <button id="hold" aria-label="Take control of the browser" title="Pause Claude in the browser"><svg viewBox="0 0 16 16"><path d="M5 3v10M11 3v10"/></svg><span>Take control</span></button>
+    </div>
+    <button id="new-tab" class="capsule round" aria-label="New tab"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+  </header>
+  <div id="split">
+    <div id="terminal"></div>
+    <div id="divider" role="separator" aria-orientation="vertical" aria-label="Resize panes"></div>
+    <div id="stage"></div>
+  </div>
+  <footer id="status" role="status">Shared with Claude</footer>
+</main>
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script src="renderer.js"></script>
+</body>
+</html>

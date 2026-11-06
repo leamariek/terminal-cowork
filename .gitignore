@@ -1,0 +1,7 @@
+node_modules/
+spikes/probe-result.json
+*.log
+.profile/
+app/renderer/vendor/
+app/config.json
+dist/
