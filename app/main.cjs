@@ -10,6 +10,8 @@ const TEST = process.env.COWORK_TEST === '1';
 const START_URL = pathToFileURL(path.join(__dirname, 'renderer/start.html')).href;
 const LOG_LIMIT = 300;
 if (TEST) app.commandLine.appendSwitch('no-sandbox');
+if (TEST && process.env.COWORK_HOST_RULES) app.commandLine.appendSwitch('host-resolver-rules', process.env.COWORK_HOST_RULES);
+const PLAIN = process.env.COWORK_PLAIN === '1'; // Terminal only, used to film the launch command.
 
 let win;
 let backend;
@@ -270,6 +272,9 @@ const agent = {
   picked: () => state.picked,
   testHold: ({ on }) => { state.hold = on; pushState(); return { hold: on }; },
   testPick: () => { startPick(); return {}; },
+  testMove: ({ x, y }) => { page().sendInputEvent({ type: 'mouseMove', x, y }); return {}; },
+  testClick: async ({ x, y }) => { await clickAt(x, y); return {}; },
+  testInsert: async ({ text }) => { await page().insertText(text); return {}; },
   testUi: ({ js }) => win.webContents.executeJavaScript(js, true),
   pageEval: ({ js }) => evaluate(js),
   quit: () => { setTimeout(() => app.quit(), 50); return {}; },
@@ -279,7 +284,7 @@ const agent = {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1500, height: 940, minWidth: 900, minHeight: 560, show: false, frame: false,
+    width: +(process.env.COWORK_WIDTH ?? 1500), height: +(process.env.COWORK_HEIGHT ?? 940), minWidth: 900, minHeight: 560, show: false, frame: false,
     backgroundColor: '#fcfbfa',
     title: 'terminal-cowork', icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: !TEST },
@@ -296,7 +301,7 @@ function createWindow() {
 }
 
 ipcMain.on('ready', (_e, size) => {
-  if (!tabs.length) switchTo(newTab().id);
+  if (!tabs.length && !PLAIN) switchTo(newTab().id);
   toBackend({ t: 'start', cols: size.cols, rows: size.rows });
 });
 ipcMain.on('input', (_e, d) => toBackend({ t: 'input', d }));
@@ -321,6 +326,27 @@ ipcMain.on('copy', (_e, text) => clipboard.writeText(text));
 ipcMain.on('paste', () => ui('pasted', clipboard.readText()));
 ipcMain.on('openExternal', (_e, url) => { if (/^https?:/.test(url)) shell.openExternal(url); });
 
+// Film recorder: writes the window's own pixels to disk, so nothing outside the app can ever be captured.
+function startRecorder(dir) {
+  const fs = require('node:fs');
+  fs.mkdirSync(dir, { recursive: true });
+  const t0 = Date.now();
+  let n = 0;
+  const index = fs.createWriteStream(path.join(dir, 'index.jsonl'));
+  const tick = async () => {
+    const at = Date.now() - t0;
+    if (!win || win.isDestroyed() || at > +(process.env.COWORK_RECORD_MS ?? Infinity)) return;
+    const tab = current();
+    const [ui, page] = await Promise.all([win.webContents.capturePage(), tab ? tab.view.webContents.capturePage().catch(() => null) : null]);
+    const id = String(n++).padStart(6, '0');
+    fs.writeFile(path.join(dir, `${id}-ui.jpg`), ui.toJPEG(94), () => {});
+    if (page && !page.isEmpty()) fs.writeFile(path.join(dir, `${id}-page.jpg`), page.toJPEG(94), () => {});
+    index.write(`${JSON.stringify({ id, at, bounds })}\n`);
+    setTimeout(tick, Math.max(0, 33 - (Date.now() - t0 - at)));
+  };
+  tick();
+}
+
 app.whenReady().then(() => {
   // Web pages get nothing sensitive by default: no camera, microphone, location or notifications.
   session.fromPartition('persist:cowork').setPermissionRequestHandler((_wc, permission, done) => done(['clipboard-sanitized-write', 'fullscreen'].includes(permission)));
@@ -329,6 +355,7 @@ app.whenReady().then(() => {
   });
   startBackend();
   createWindow();
+  if (process.env.COWORK_RECORD) win.webContents.once('did-finish-load', () => startRecorder(process.env.COWORK_RECORD));
 });
 app.on('before-quit', () => { app.isQuitting = true; backend?.stdin.end(); });
 app.on('window-all-closed', () => app.quit());

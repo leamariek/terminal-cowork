@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 // ---- Terminal ----
 
 const term = new Terminal({
-  fontFamily: "'JetBrains Mono', 'Cascadia Mono', Consolas, 'Segoe UI Symbol', monospace",
+  fontFamily: "'Cell Blocks', 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Segoe UI Symbol', monospace",
   fontSize: 13,
   lineHeight: 1,
   cursorBlink: true,
@@ -21,7 +21,7 @@ const term = new Terminal({
 const fit = new FitAddon.FitAddon();
 term.loadAddon(fit);
 
-document.fonts.load("13px 'JetBrains Mono'").finally(() => {
+Promise.all([document.fonts.load("13px 'JetBrains Mono'"), document.fonts.load("13px 'Cell Blocks'", '\u2588')]).finally(() => {
   term.open($('terminal'));
   fit.fit();
   term.focus();
@@ -66,6 +66,7 @@ divider.addEventListener('pointerdown', (e) => {
 document.querySelectorAll('[data-control]').forEach((b) => b.addEventListener('click', () => send('control', b.dataset.control)));
 on('windowFocus', (focused) => document.body.classList.toggle('blurred', !focused));
 document.documentElement.dataset.platform = window.cowork.platform;
+if (window.cowork.plain) { document.body.classList.add('plain'); $('title').textContent = 'Terminal'; }
 
 // ---- Toolbar ----
 
@@ -115,7 +116,7 @@ function tabRow(t) {
 
 function render() {
   const t = activeTab();
-  if (document.activeElement !== address) address.value = shortUrl(t?.url);
+  if (document.activeElement !== address) address.value = t?.kind === 'preview' ? t.title : shortUrl(t?.url);
   $('lock').toggleAttribute('hidden', !t?.url?.startsWith('https:'));
   $('progress').classList.toggle('loading', Boolean(t?.loading));
   $('back').disabled = !view.canBack;
@@ -128,7 +129,7 @@ function render() {
   $('web-tabs').replaceChildren(...web.map(tabRow));
   $('preview-tabs').replaceChildren(...previews.map(tabRow));
   $('preview-group').hidden = previews.length === 0;
-  $('title').textContent = t?.title && t.title !== 'New Tab' ? t.title : 'Claude Code';
+  if (!window.cowork.plain) $('title').textContent = t?.title && t.title !== 'New Tab' ? t.title : 'Claude Code';
   showStatus(view.note);
 }
 

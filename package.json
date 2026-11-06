@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Claude Code on the left, a shared Chrome and previews on the right, in one terminal tab.",
   "bin": {
-    "cowork": "./bin/cowork.js"
+    "cowork": "./bin/cowork.js",
+    "terminal-cowork": "./bin/terminal-cowork.js"
   },
   "engines": {
     "node": ">=22"

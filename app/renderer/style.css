@@ -3,6 +3,7 @@
    the sidebar tint stands in for the wallpaper that shows through on a Mac. */
 @font-face { font-family: Inter; src: url(vendor/inter.woff2) format('woff2'); font-weight: 100 900; }
 @font-face { font-family: 'JetBrains Mono'; src: url(vendor/jetbrains.woff2) format('woff2'); font-weight: 400; }
+@font-face { font-family: 'Cell Blocks'; src: url(cells.ttf) format('truetype'); unicode-range: U+2580-259F, U+23BF, U+23F5; }
 
 :root {
   --content: #fcfbfa;
@@ -106,3 +107,8 @@ button.capsule.round:hover { background: #efefef; }
 .blurred #title, .blurred #status { color: var(--tertiary); }
 
 @media (prefers-reduced-motion: reduce) { #progress.loading { transition: none; } }
+
+/* Terminal-only window. */
+body.plain #sidebar, body.plain #stage, body.plain #divider, body.plain #status, body.plain #toolbar > :not(#title), body.plain #toggle-sidebar { display: none; }
+body.plain #split { grid-template-columns: 1fr; }
+body.plain #title { flex: 1; text-align: center; font-size: 13px; }

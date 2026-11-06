@@ -100,6 +100,6 @@ export function buildPreview(input, stateDir) {
 
   mkdirSync(stateDir, { recursive: true });
   const target = join(stateDir, 'preview.html');
-  writeFileSync(target, page(file, body));
+  writeFileSync(target, page(name, body));
   return toUrl(target);
 }

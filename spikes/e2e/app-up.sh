@@ -3,4 +3,5 @@
 cd "$(dirname "$0")/../.."
 export COWORK_TEST=1 COWORK_SOCK=$1/app.sock COWORK_NODE=$(command -v node) COWORK_SHELL_COMMAND="${COWORK_SHELL_COMMAND:-printf 'last login: test\n'; exec bash --norc}"
 [ -n "$COWORK_REAL" ] && unset COWORK_SHELL_COMMAND  # real Claude Code instead of a plain shell
+unset CLAUDE_CODE_CHILD_SESSION
 exec npx electron app --no-sandbox --force-device-scale-factor=${COWORK_SCALE:-1.5} --user-data-dir=$1/appdata
