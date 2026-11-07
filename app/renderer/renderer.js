@@ -324,7 +324,34 @@ setInterval(renderBoard, 1000);
 
 let look = { mode: 'light', wallpaper: 'tahoe', tint: 0.5, custom: null, list: [] };
 // In Glass the terminal draws no background of its own, so the frosted pane behind it shows.
-function termTheme() { return look.mode === 'glass' ? { ...THEME, background: 'rgba(0,0,0,0)' } : THEME; }
+const DARK = {
+  background: 'rgba(0,0,0,0)', foreground: '#f2f2f7', cursor: '#f2f2f7', cursorAccent: '#1c1c1e', selectionBackground: 'rgba(100,160,255,0.4)',
+  black: '#1c1c1e', red: '#ff6961', green: '#4cd964', yellow: '#ffd60a', blue: '#5eaaff', magenta: '#d38cff', cyan: '#5ad6e8', white: '#d1d1d6',
+  brightBlack: '#8e8e93', brightRed: '#ff8a80', brightGreen: '#6fe388', brightYellow: '#ffe066', brightBlue: '#82bdff', brightMagenta: '#e0a8ff', brightCyan: '#7fe3f0', brightWhite: '#ffffff',
+};
+let onDark = false;   // Set from the wallpaper's measured brightness, so glass text always has contrast.
+function termTheme() { return look.mode !== 'glass' ? THEME : onDark ? DARK : { ...THEME, background: 'rgba(0,0,0,0)' }; }
+// Mean linear luminance of the wallpaper, sampled small. Below 0.2 (darker than mid grey) the glass turns smoky.
+const brightness = new Map();
+function measure(url) {
+  if (brightness.has(url)) return Promise.resolve(brightness.get(url));
+  return new Promise((done) => {
+    const img = new Image();
+    img.onload = () => {
+      let v = 0.5;
+      try {
+        const c = document.createElement('canvas'); c.width = 48; c.height = 27;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0, 48, 27);
+        const d = g.getImageData(0, 0, 48, 27).data, lin = (x) => ((x /= 255) <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+        let sum = 0; for (let i = 0; i < d.length; i += 4) sum += 0.2126 * lin(d[i]) + 0.7152 * lin(d[i + 1]) + 0.0722 * lin(d[i + 2]);
+        v = sum / (d.length / 4);
+      } catch { /* Unreadable image: treat as light. */ }
+      brightness.set(url, v); done(v);
+    };
+    img.onerror = () => done(0.5);
+    img.src = url;
+  });
+}
 const wallpaperUrl = (id) => (id === 'custom' && look.custom ? look.custom : `wallpapers/${look.list.some((w) => w.id === id) ? id : 'tahoe'}.jpg`);
 
 function applyAppearance() {
@@ -332,7 +359,10 @@ function applyAppearance() {
   document.body.classList.toggle('glass', glass);
   document.body.style.setProperty('--wallpaper', `url("${wallpaperUrl(look.wallpaper)}")`);
   document.body.style.setProperty('--tint', String(look.tint));
-  for (const t of terminals.values()) t.xterm.options.theme = termTheme();
+  const url = wallpaperUrl(look.wallpaper);
+  const paint = () => { document.body.classList.toggle('on-dark', glass && onDark); for (const t of terminals.values()) t.xterm.options.theme = termTheme(); };
+  paint();
+  if (glass) measure(url).then((v) => { if (wallpaperUrl(look.wallpaper) === url) { onDark = v < 0.2; paint(); } });
   renderAppearance();
 }
 
