@@ -64,6 +64,10 @@ Inside a terminal, Ctrl+Shift+T starts a new Claude Code session.
 
 Appearance (bottom of the sidebar, or Ctrl+,) switches between Light and Glass. Glass puts a nature photo behind frosted panes, with a Liquid Glass slider from clear to tinted, eight wallpapers and Choose… for a picture of your own.
 
+The Agents board shows every Claude Code session on the machine, including ones started outside the app (tmux, other terminals), read from Claude Code's own session records. Each card lists that session's background work: workflows, shells, monitors and agents, also the ones started by workflow agents.
+
+After a restart or an update the app reopens its terminals in their folders: Claude Code sessions resume (one that was working is told to continue), and terminals that were attached to tmux reattach. Closing every terminal by hand starts clean next time.
+
 Copy and paste in a terminal work like Windows Terminal: Ctrl+C copies selected text (without a selection it interrupts), Ctrl+Shift+C always copies, Ctrl+V, Ctrl+Shift+V and Shift+Insert paste, and right-click copies a selection or pastes. With a screenshot on the clipboard, Ctrl+V goes through to Claude Code, which attaches the image.
 
 ## How it works
@@ -85,6 +89,7 @@ terminal-cowork.exe (window, browser)  <-- stdin and stdout through wsl.exe --> 
 ```sh
 spikes/e2e/app-up.sh <scratch folder> &
 python3 spikes/e2e/app-check.py <scratch folder>
+python3 spikes/e2e/restore-check.py <scratch folder>   # starts its own instances
 ```
 
 ## Credits

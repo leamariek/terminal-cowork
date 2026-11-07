@@ -247,8 +247,9 @@ function elapsed(since) {
 
 function card(a) {
   const el = document.createElement('button');
-  el.className = 'card';
-  el.addEventListener('click', () => showTerminal(a.id));
+  el.className = 'card' + (a.term ? '' : ' away');
+  if (a.term) el.addEventListener('click', () => showTerminal(a.term));
+  else el.title = 'Runs outside this app (for example in tmux), so there is no terminal here to open';
   const line = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; return d; };
   const head = line('head', a.name);
   const time = document.createElement('span');
@@ -259,6 +260,25 @@ function card(a) {
   if (a.prompt) el.append(line('prompt', a.prompt));
   const more = a.subagents ? ` with ${a.subagents} subagent${a.subagents > 1 ? 's' : ''}` : '';
   el.append(line('doing', `${a.activity}${more}`));
+  // Background work: workflows, shells, monitors and agents, running first, finished ones fade out after a while.
+  const tasks = a.tasks ?? [];
+  if (tasks.length) {
+    const list = document.createElement('ul');
+    list.className = 'tasks';
+    const SHOW = 8;
+    for (const x of tasks.slice(0, SHOW)) {
+      const li = document.createElement('li');
+      li.className = `task ${x.state}`;
+      li.title = `${x.kind}: ${x.label}`;
+      li.innerHTML = '<i class="dot"></i><span class="kind"></span><span class="label"></span><span class="time"></span>';
+      li.querySelector('.kind').textContent = x.kind;
+      li.querySelector('.label').textContent = x.label;
+      li.querySelector('.time').textContent = x.state === 'running' ? elapsed(x.started) : x.state === 'done' ? 'done' : x.state;
+      list.append(li);
+    }
+    if (tasks.length > SHOW) { const li = document.createElement('li'); li.className = 'task more'; li.textContent = `${tasks.length - SHOW} more`; list.append(li); }
+    el.append(list);
+  }
   return el;
 }
 

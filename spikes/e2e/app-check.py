@@ -129,7 +129,28 @@ try:
     ui("document.querySelector('.card').click(),1")
     check("clicking a card opens that terminal", wait(lambda: ui("document.body.classList.contains('board')") is False and ui("termId") == 1))
     ui("send('termClose',2),1"); check("closing a terminal removes it", wait(lambda: ui("terminals.size") == n0))
+    # Sessions started outside the app, with their background work, read from Claude Code's own records.
+    sys.path.insert(0, os.path.dirname(__file__)); import fake_session
+    fake = fake_session.make(os.environ.get("COWORK_CLAUDE_DIR", S + "/claude"), "/tmp/elsewhere")
+    try:
+        outside = lambda: next((a for a in js("call", "agents") if a.get("outside")), None)
+        check("a session from outside the app joins the board", wait(lambda: outside() is not None, 8))
+        o = outside() or {}
+        check("it sits in the lane of its live status", o.get("state") == "working" and o.get("folder") == "elsewhere", o)
+        kinds = {t["label"]: t["state"] for t in o.get("tasks", [])}
+        check("its workflow shows by name and key, running", kinds.get("nightly-build · build-42") == "running", kinds)
+        check("a background shell with an end notice shows as done", kinds.get("Run the tests") == "done", kinds)
+        check("copies in api-request records are not counted", len(o.get("tasks", [])) == 2, o.get("tasks"))
+        check("its card says what runs", "1 workflow running" in o.get("activity", ""), o.get("activity"))
+        ui("openBoard(),1")
+        check("the board lists its work", wait(lambda: "nightly-build" in ui("document.getElementById('board').textContent")))
+        ui("closeBoard(),1")
+    finally:
+        fake.kill(); fake.wait()
+    check("a session that ended leaves the board", wait(lambda: outside() is None, 8))
     # Appearance: Light or Glass over a wallpaper, kept across restarts.
+    for leftover in ("wallpaper-custom.jpg", "appearance.json"):   # A previous run's picture would add a tile.
+        if os.path.exists(f"{S}/appdata/{leftover}"): os.remove(f"{S}/appdata/{leftover}")
     vis = lambda: cw("call", "pageEval", json.dumps({"js": "document.visibilityState"})).stdout.strip().strip('"')
     ui("send('appearance',{mode:'light'}),1"); check("Light has no glass", wait(lambda: ui("document.body.classList.contains('glass')") is False))
     keyp(",", ["control"]); check("Ctrl+, opens Appearance", wait(lambda: ui("!document.getElementById('sheet-veil').hidden") is True))

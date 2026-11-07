@@ -1,7 +1,7 @@
 #!/bin/bash
 # Starts the app hidden with a test socket. Usage: app-up.sh <scratch folder>
 cd "$(dirname "$0")/../.."
-export COWORK_TEST=1 COWORK_SOCK=$1/app.sock COWORK_NODE=$(command -v node) COWORK_SHELL_COMMAND="${COWORK_SHELL_COMMAND:-printf 'last login: test\n'; exec bash --norc}"
+export COWORK_TEST=1 COWORK_SOCK=$1/app.sock COWORK_DATA_DIR=${COWORK_DATA_DIR:-$1/data} COWORK_CLAUDE_DIR=${COWORK_CLAUDE_DIR:-$1/claude} TMUX_TMPDIR=${TMUX_TMPDIR:-$1/tmux} COWORK_NODE=$(command -v node) COWORK_SHELL_COMMAND="${COWORK_SHELL_COMMAND:-printf 'last login: test\n'; exec bash --norc}"
 [ -n "$COWORK_REAL" ] && unset COWORK_SHELL_COMMAND  # real Claude Code instead of a plain shell
 unset CLAUDE_CODE_CHILD_SESSION
 exec npx electron app --no-sandbox --force-device-scale-factor=${COWORK_SCALE:-1.5} --user-data-dir=$1/appdata

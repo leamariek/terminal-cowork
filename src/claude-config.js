@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 // The events that drive the Agents board.
 const AGENT_EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SubagentStart', 'SubagentStop'];
 
-export const dataDir = join(homedir(), '.local/share/terminal-cowork');
+export const dataDir = process.env.COWORK_DATA_DIR ?? join(homedir(), '.local/share/terminal-cowork');   // Tests get their own.
 
 export function claudeFlags(root) {
   mkdirSync(dataDir, { recursive: true });
