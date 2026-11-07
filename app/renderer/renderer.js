@@ -20,7 +20,7 @@ function addTerminal({ id, kind, name }) {
   $('terminal').append(pane);
   const xterm = new Terminal({
     fontFamily: "'Cell Blocks', 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Segoe UI Symbol', monospace",
-    fontSize: 13, lineHeight: 1, cursorBlink: true, cursorStyle: 'block', scrollback: 20000, allowProposedApi: true, theme: THEME,
+    fontSize: 13, lineHeight: 1, cursorBlink: true, cursorStyle: 'block', scrollback: 20000, allowProposedApi: true, allowTransparency: true, theme: termTheme(),
   });
   const fit = new FitAddon.FitAddon();
   xterm.loadAddon(fit);
@@ -39,6 +39,7 @@ function addTerminal({ id, kind, name }) {
     if (k === 'c' && (e.shiftKey || xterm.hasSelection())) return take(copy);
     if (k === 'v') return take(() => send('paste', id));
     if (e.shiftKey && k === 't') return take(() => send('termNew', 'claude'));
+    if (e.key === ',') return take(openAppearance);
     return true;
   });
   pane.addEventListener('contextmenu', (e) => { e.preventDefault(); if (xterm.hasSelection()) copy(); else send('paste', id); xterm.focus(); });
@@ -298,3 +299,81 @@ function closeBoard() {
 
 on('agents', ({ list }) => { agents = list; renderTerminals(); renderBoard(); });
 setInterval(renderBoard, 1000);
+
+// ---- Appearance: Light, or Glass over a wallpaper, laid out like System Settings > Appearance on macOS 27. ----
+
+let look = { mode: 'light', wallpaper: 'tahoe', tint: 0.5, custom: null, list: [] };
+// In Glass the terminal draws no background of its own, so the frosted pane behind it shows.
+function termTheme() { return look.mode === 'glass' ? { ...THEME, background: 'rgba(0,0,0,0)' } : THEME; }
+const wallpaperUrl = (id) => (id === 'custom' && look.custom ? look.custom : `wallpapers/${look.list.some((w) => w.id === id) ? id : 'tahoe'}.jpg`);
+
+function applyAppearance() {
+  const glass = look.mode === 'glass';
+  document.body.classList.toggle('glass', glass);
+  document.body.style.setProperty('--wallpaper', `url("${wallpaperUrl(look.wallpaper)}")`);
+  document.body.style.setProperty('--tint', String(look.tint));
+  for (const t of terminals.values()) t.xterm.options.theme = termTheme();
+  renderAppearance();
+}
+
+function renderAppearance() {
+  for (const tile of document.querySelectorAll('.tile')) {
+    const on = tile.dataset.mode === look.mode;
+    tile.classList.toggle('on', on);
+    tile.setAttribute('aria-checked', String(on));
+    tile.querySelector('.thumb').style.backgroundImage = `url("${look.wallpaper === 'custom' && look.custom ? look.custom : `wallpapers/${look.wallpaper}-thumb.jpg`}")`;
+  }
+  $('tint').value = Math.round(look.tint * 100);
+  $('tint').style.setProperty('--v', `${look.tint * 100}%`);
+  const box = $('wallpapers');
+  const items = [...look.list.map((w) => ({ id: w.id, name: w.name, thumb: `wallpapers/${w.id}-thumb.jpg` })),
+    ...(look.custom ? [{ id: 'custom', name: 'My Picture', thumb: look.custom }] : [])];
+  box.replaceChildren(...items.map((w) => {
+    const b = document.createElement('button');
+    b.className = 'wall' + (w.id === look.wallpaper ? ' on' : '');
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(w.id === look.wallpaper));
+    b.innerHTML = '<span class="pic"></span><span class="caption"></span>';
+    b.querySelector('.pic').style.backgroundImage = `url("${w.thumb}")`;
+    b.querySelector('.caption').textContent = w.name;
+    b.addEventListener('click', () => send('appearance', { wallpaper: w.id, mode: 'glass' }));
+    return b;
+  }));
+  const add = document.createElement('button');
+  add.className = 'wall add';
+  add.innerHTML = '<span class="pic"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></span><span class="caption">Choose…</span>';
+  add.setAttribute('aria-label', 'Choose a picture');
+  add.addEventListener('click', () => send('pickWallpaper'));
+  box.append(add);
+  const w = look.list.find((x) => x.id === look.wallpaper);
+  $('wallpaper-credit').textContent = w ? `${w.name}: photo by ${w.artist}, ${w.license}, Wikimedia Commons` : '';
+}
+
+function openAppearance() {
+  if (!$('sheet-veil').hidden) return;
+  $('sheet-veil').hidden = false;
+  send('sheet', true);
+  requestAnimationFrame(() => $('appearance').focus());   // The sheet takes focus, so no tile shows a second ring.
+}
+function closeAppearance() {
+  if ($('sheet-veil').hidden) return;
+  $('sheet-veil').hidden = true;
+  send('sheet', false);
+  term?.focus();
+}
+
+on('appearance', (a) => { look = a; applyAppearance(); });
+$('row-appearance').addEventListener('click', openAppearance);
+$('appearance-done').addEventListener('click', closeAppearance);
+$('sheet-veil').addEventListener('mousedown', (e) => { if (e.target === $('sheet-veil')) closeAppearance(); });
+for (const tile of document.querySelectorAll('.tile')) tile.addEventListener('click', () => send('appearance', { mode: tile.dataset.mode }));
+$('tint').addEventListener('input', () => {
+  look.tint = $('tint').value / 100;   // Live while dragging, saved when let go.
+  document.body.style.setProperty('--tint', String(look.tint));
+  $('tint').style.setProperty('--v', `${$('tint').value}%`);
+});
+$('tint').addEventListener('change', () => send('appearance', { tint: $('tint').value / 100 }));
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === ',') { e.preventDefault(); openAppearance(); }
+  else if (e.key === 'Escape' && !$('sheet-veil').hidden) { e.preventDefault(); closeAppearance(); }
+});

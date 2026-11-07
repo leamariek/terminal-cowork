@@ -1,7 +1,7 @@
 // The window: chrome, real browser tabs, and the bridge to the backend inside WSL.
-const { app, BrowserWindow, ClipboardItem, WebContentsView, clipboard, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, ClipboardItem, WebContentsView, clipboard, dialog, ipcMain, nativeImage, session, shell } = require('electron');
 const { spawn } = require('node:child_process');
-const { appendFileSync, existsSync, readFileSync } = require('node:fs');
+const { appendFileSync, existsSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
 const { pathToFileURL } = require('node:url');
@@ -21,6 +21,7 @@ let active = null;
 let nextTab = 1;
 let activeTerm = 1;
 let boardOpen = false;
+let sheetOpen = false; // The Appearance sheet is HTML, so the native page view steps aside while it shows.
 const state = { hold: false, picking: false, note: '', noteUntil: 0, picked: null, logs: [] };
 const current = () => tabs.find((t) => t.id === active);
 
@@ -78,7 +79,7 @@ function log(tab, level, text) {
 
 function layout() {
   for (const t of tabs) {
-    t.view.setVisible(t.id === active && !boardOpen);
+    t.view.setVisible(t.id === active && !boardOpen && !sheetOpen);
     if (t.id === active) t.view.setBounds(bounds);
   }
 }
@@ -295,6 +296,7 @@ const agent = {
   },
   testClipboardRead: async () => ({ text: await clipboard.readText(), png: await clipboard.has('image/png'), types: (await clipboard.read()).flatMap((i) => i.types) }),
   testKey: ({ key, mods = [] }) => { win.focus(); win.webContents.focus(); for (const type of ['keyDown', 'char', 'keyUp']) win.webContents.sendInputEvent({ type, keyCode: key, modifiers: mods }); return {}; },
+  testCapture: async ({ file }) => { writeFileSync(file, (await win.webContents.capturePage()).toPNG()); return { file }; },
   pageEval: ({ js }) => evaluate(js),
   quit: () => { setTimeout(() => app.quit(), 50); return {}; },
 };
@@ -320,6 +322,7 @@ function createWindow() {
 }
 
 ipcMain.on('ready', () => {
+  sendAppearance();
   if (!tabs.length && !PLAIN) switchTo(newTab().id);
   toBackend({ t: 'start' });
 });
@@ -329,6 +332,38 @@ ipcMain.on('termNew', (_e, kind) => toBackend({ t: 'new', kind }));
 ipcMain.on('termClose', (_e, id) => toBackend({ t: 'close', id }));
 ipcMain.on('termFocus', (_e, id) => { activeTerm = id; });
 ipcMain.on('board', (_e, on) => { boardOpen = on; layout(); });
+ipcMain.on('sheet', (_e, on) => { sheetOpen = on; layout(); });
+
+// ---- Appearance: Light, or Glass over a wallpaper. Kept per user, outside the app folder. ----
+
+const appearanceFile = () => path.join(app.getPath('userData'), 'appearance.json');
+const customFile = () => path.join(app.getPath('userData'), 'wallpaper-custom.jpg');
+function readAppearance() {
+  let a = {};
+  try { a = JSON.parse(readFileSync(appearanceFile(), 'utf8')); } catch { /* First run: defaults. */ }
+  return { mode: a.mode === 'glass' ? 'glass' : 'light', wallpaper: a.wallpaper ?? 'tahoe', tint: Number.isFinite(a.tint) ? a.tint : 0.5 };
+}
+function sendAppearance() {
+  const a = readAppearance();
+  const custom = existsSync(customFile()) ? `data:image/jpeg;base64,${readFileSync(customFile()).toString('base64')}` : null;
+  const list = JSON.parse(readFileSync(path.join(__dirname, 'renderer/wallpapers/wallpapers.json'), 'utf8'));
+  ui('appearance', { ...a, custom, list });
+}
+ipcMain.on('appearance', (_e, change) => {
+  writeFileSync(appearanceFile(), JSON.stringify({ ...readAppearance(), ...change }));
+  sendAppearance();
+});
+ipcMain.on('pickWallpaper', async () => {
+  const r = TEST && process.env.COWORK_PICK_FILE ? { filePaths: [process.env.COWORK_PICK_FILE] }   // Tests cannot click a system dialog.
+    : await dialog.showOpenDialog(win, { title: 'Choose a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'] }] });
+  if (r.canceled || !r.filePaths[0]) return;
+  let image = nativeImage.createFromPath(r.filePaths[0]);
+  if (image.isEmpty()) return ui('notice', 'That file is not a picture this app can read.');
+  if (image.getSize().width > 2560) image = image.resize({ width: 2560, quality: 'best' });
+  writeFileSync(customFile(), image.toJPEG(85));
+  writeFileSync(appearanceFile(), JSON.stringify({ ...readAppearance(), mode: 'glass', wallpaper: 'custom' }));
+  sendAppearance();
+});
 ipcMain.on('bounds', (_e, b) => { bounds = b; layout(); });
 ipcMain.on('control', (_e, name) => {
   if (name === 'close') win.close();

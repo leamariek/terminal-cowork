@@ -156,3 +156,58 @@ body.board #split { display: none; }
 
 .row { box-sizing: border-box; }
 body.board .row.tab.current { background: none; font-weight: 400; }
+
+/* Appearance sheet. Measured from macOS 27 System Settings > Appearance (2x capture, so 2 px = 1 pt): page white,
+   groups #f7f7f7 with 12 pt corners and #ebebeb rules, 13 pt labels, tiles 73x48 with a 3 pt accent ring and a 1 pt gap,
+   slider track #e1e1e0 with the accent fill, unselected captions in the secondary grey. */
+#row-appearance { margin-top: auto; }
+#sidebar { display: flex; flex-direction: column; }
+#sidebar > * { flex: none; }
+#sheet-veil { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; align-items: flex-start; padding: 64px 16px 24px; background: rgba(0, 0, 0, 0.14); }
+#sheet-veil[hidden] { display: none; }
+#appearance { width: 560px; max-height: 100%; overflow-y: auto; padding: 0 20px 18px; border-radius: 16px; background: #fff; box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 22px 60px rgba(0, 0, 0, 0.26); animation: sheet-in 0.22s cubic-bezier(.2, .9, .3, 1); }
+#appearance:focus { outline: none; }
+@keyframes sheet-in { from { transform: translateY(-14px); opacity: 0; } }
+#appearance header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; height: 54px; background: #fff; }
+#appearance h2 { margin: 0; font-size: 15px; font-weight: 600; }
+#appearance h3 { margin: 22px 10px 8px; font-size: 13px; font-weight: 600; }
+.done { height: 26px; padding: 0 14px; border-radius: 13px; background: var(--blue); color: #fff; font-weight: 500; }
+.done:hover { background: #0068e0; }
+#appearance .group { padding: 0 10px; border-radius: 12px; background: #f7f7f7; }
+.setting { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12px 0; }
+.setting + .setting { border-top: 1px solid #ebebeb; }
+.setting .label { padding-top: 2px; }
+.tiles { display: flex; gap: 14px; }
+.tile, .wall { flex-direction: column; gap: 6px; color: var(--secondary); }
+.tile .thumb { position: relative; display: block; width: 73px; height: 48px; border-radius: 7px; background: #cfd6de center / cover; box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.18); overflow: hidden; }
+.tile .mini { position: absolute; right: 0; bottom: 0; width: 72%; height: 64%; display: flex; gap: 3px; padding: 5px 0 0 6px; border-radius: 5px 0 0 0; background: #fcfbfa; box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12); }
+.tile[data-mode=glass] .mini { background: rgba(255, 255, 255, 0.42); backdrop-filter: blur(6px) saturate(1.6); }
+.mini i { width: 5px; height: 5px; border-radius: 50%; background: #f47870; }
+.mini i:nth-child(2) { background: #fac72d; }
+.mini i:nth-child(3) { background: #81d35c; }
+.tile.on, .wall.on { color: var(--label); font-weight: 600; }
+.tile.on .thumb, .wall.on .pic { box-shadow: 0 0 0 1px #fff, 0 0 0 4px var(--blue); }
+.tile:focus-visible, .wall:focus-visible { outline: none; }
+.tile:focus-visible .thumb, .wall:focus-visible .pic { box-shadow: 0 0 0 1px #fff, 0 0 0 4px rgba(0, 113, 245, 0.45); }
+.glass-slider { display: flex; align-items: center; gap: 10px; width: 300px; padding-top: 2px; color: var(--secondary); }
+.glass-slider svg { width: 20px; flex: none; }
+#tint { flex: 1; height: 22px; margin: 0; background: none; -webkit-appearance: none; appearance: none; }
+#tint::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: linear-gradient(90deg, var(--blue) var(--v, 50%), #e1e1e0 var(--v, 50%)); }
+#tint::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 16px; margin-top: -5.5px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.22); }
+#wallpapers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 14px; padding: 14px 0; }
+.wall .pic { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; background: #e9e9eb center / cover; box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.14); }
+.wall .caption { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.wall.add .pic { background: #ececee; color: var(--secondary); }
+.wall.add .pic svg { width: 18px; height: 18px; }
+#wallpaper-credit { margin: 10px 10px 0; font-size: 11px; color: var(--secondary); }
+body:not(.glass) .glass-only { display: none; }
+
+/* Glass: the wallpaper fills the window and every surface above it is frosted. --tint runs from clear (0) to tinted (1).
+   The terminal stays the most opaque layer so text keeps its contrast; web pages stay opaque, as in Safari. */
+body.glass { background: #cfd6de var(--wallpaper) center / cover no-repeat; }
+body.glass #sidebar { --secondary: rgba(40, 40, 50, 0.72); background: rgba(246, 244, 242, calc(0.42 + 0.42 * var(--tint))); backdrop-filter: blur(30px) saturate(1.7); }
+body.glass #main { background: rgba(252, 251, 250, calc(0.66 + 0.3 * var(--tint))); backdrop-filter: blur(40px) saturate(1.6); box-shadow: -0.5px 0 0 rgba(255, 255, 255, 0.35); }
+body.glass #board { background: transparent; }
+body.glass .card { background: rgba(255, 255, 255, 0.82); }
+body.glass .capsule { background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(247, 247, 247, 0.62)); }
+body.glass #toolbar, body.glass #status { border-color: rgba(0, 0, 0, 0.06); }

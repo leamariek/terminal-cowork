@@ -31,6 +31,7 @@
     <h2>Preview</h2>
     <div id="preview-tabs"></div>
   </div>
+  <button id="row-appearance" class="row" aria-haspopup="dialog" title="Appearance (Ctrl+,)"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path class="fill" d="M8 2.4a5.6 5.6 0 010 11.2z"/></svg><span class="name">Appearance</span></button>
 </aside>
 <main id="main">
   <header id="toolbar">
@@ -61,6 +62,31 @@
   <section id="board" aria-label="Agents" hidden></section>
   <footer id="status" role="status">Shared with Claude</footer>
 </main>
+<div id="sheet-veil" hidden>
+  <section id="appearance" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
+    <header><h2 id="appearance-title">Appearance</h2><button id="appearance-done" class="done">Done</button></header>
+    <div class="group">
+      <div class="setting">
+        <span class="label">Appearance</span>
+        <div class="tiles" role="radiogroup" aria-label="Appearance">
+          <button class="tile" role="radio" data-mode="light"><span class="thumb"><span class="mini"><i></i><i></i><i></i></span></span><span class="caption">Light</span></button>
+          <button class="tile" role="radio" data-mode="glass"><span class="thumb"><span class="mini"><i></i><i></i><i></i></span></span><span class="caption">Glass</span></button>
+        </div>
+      </div>
+      <div class="setting glass-only">
+        <span class="label">Liquid Glass</span>
+        <div class="glass-slider">
+          <svg viewBox="0 0 20 16" aria-hidden="true"><rect x="1.5" y="3.5" width="12" height="9" rx="3"/><rect x="6.5" y="1.5" width="12" height="9" rx="3"/></svg>
+          <input id="tint" type="range" min="0" max="100" step="1" aria-label="Liquid Glass, clear to tinted">
+          <svg viewBox="0 0 20 16" aria-hidden="true"><rect x="1.5" y="3.5" width="12" height="9" rx="3"/><rect class="fill" x="6.5" y="1.5" width="12" height="9" rx="3"/></svg>
+        </div>
+      </div>
+    </div>
+    <h3 class="glass-only">Wallpaper</h3>
+    <div class="group glass-only"><div id="wallpapers" role="radiogroup" aria-label="Wallpaper"></div></div>
+    <p id="wallpaper-credit" class="glass-only"></p>
+  </section>
+</div>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
 <script src="renderer.js"></script>

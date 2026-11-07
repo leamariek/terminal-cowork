@@ -62,6 +62,8 @@ Inside the browser:
 
 Inside a terminal, Ctrl+Shift+T starts a new Claude Code session.
 
+Appearance (bottom of the sidebar, or Ctrl+,) switches between Light and Glass. Glass puts a nature photo behind frosted panes, with a Liquid Glass slider from clear to tinted, eight wallpapers and Choose… for a picture of your own.
+
 Copy and paste in a terminal work like Windows Terminal: Ctrl+C copies selected text (without a selection it interrupts), Ctrl+Shift+C always copies, Ctrl+V, Ctrl+Shift+V and Shift+Insert paste, and right-click copies a selection or pastes. With a screenshot on the clipboard, Ctrl+V goes through to Claude Code, which attaches the image.
 
 ## How it works
@@ -88,6 +90,17 @@ python3 spikes/e2e/app-check.py <scratch folder>
 ## Credits
 
 Inspired by [terminal-mac](https://github.com/govijr/terminal-mac) and [terminal-browser](https://github.com/zenbu-labs/terminal-browser). Interface type is [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/).
+
+Wallpapers from Wikimedia Commons, each under its own license (the app's MIT license does not cover them):
+
+- Lake Tahoe: [Lake Tahoe at morning - 7-2023.jpg](https://commons.wikimedia.org/wiki/File:Lake_Tahoe_at_morning_-_7-2023.jpg) by John D., CC BY 2.0
+- Kungsleden: [Stuor Dáhtá lake along the Kungsleden trail during golden hour in Kvikkjokk-Kabla fjällurskog (DSCF2557).jpg](https://commons.wikimedia.org/wiki/File:Stuor_D%C3%A1ht%C3%A1_lake_along_the_Kungsleden_trail_during_golden_hour_in_Kvikkjokk-Kabla_fj%C3%A4llurskog_(DSCF2557).jpg) by Trougnouf (Benoit Brummer), CC BY 4.0
+- Gokyo: [Gokyo Ri summit, Gokyo Lake, Nepal, Himalayas.jpg](https://commons.wikimedia.org/wiki/File:Gokyo_Ri_summit,_Gokyo_Lake,_Nepal,_Himalayas.jpg) by Vyacheslav Argenberg, CC BY 4.0
+- Cerro Pachón: [Vera C Rubin Observatory in the Snow (IMG 0315-CC).jpg](https://commons.wikimedia.org/wiki/File:Vera_C_Rubin_Observatory_in_the_Snow_(IMG_0315-CC).jpg) by NOIRLab/NSF/AURA/C. Corco, CC BY 4.0
+- Padar: [Padar Island, Komodo National Park, Indonesia, 20250822 0929 2659.jpg](https://commons.wikimedia.org/wiki/File:Padar_Island,_Komodo_National_Park,_Indonesia,_20250822_0929_2659.jpg) by Jakub Hałun, CC BY 4.0
+- High Fens: [Bois Raquet, in the High Fens – Eifel Nature Park (DSCF6655).jpg](https://commons.wikimedia.org/wiki/File:Bois_Raquet,_in_the_High_Fens_%E2%80%93_Eifel_Nature_Park_(DSCF6655).jpg) by Trougnouf (Benoit Brummer), CC BY 4.0
+- Frontignan: [Dike in Frontignan.jpg](https://commons.wikimedia.org/wiki/File:Dike_in_Frontignan.jpg) by Christian Ferrer, CC BY 4.0
+- Salagou: [Lac du Salagou - October 2020.jpg](https://commons.wikimedia.org/wiki/File:Lac_du_Salagou_-_October_2020.jpg) by Christian Ferrer, CC BY 4.0
 
 Not affiliated with Apple or Anthropic.
 
