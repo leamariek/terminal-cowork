@@ -1,5 +1,5 @@
 // The window: chrome, real browser tabs, and the bridge to the backend inside WSL.
-const { app, BrowserWindow, WebContentsView, clipboard, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, clipboard, ipcMain, nativeImage, session, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const { appendFileSync, existsSync, readFileSync } = require('node:fs');
 const path = require('node:path');
@@ -152,7 +152,7 @@ const PICK_JS = `new Promise((done) => {
   box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #0a84ff;border-radius:4px;background:rgba(10,132,255,.14)';
   document.documentElement.append(box);
   const move = (e) => { const b = e.target.getBoundingClientRect(); Object.assign(box.style, { left: b.x + 'px', top: b.y + 'px', width: b.width + 'px', height: b.height + 'px' }); };
-  const finish = (value) => { removeEventListener('mousemove', move, true); removeEventListener('click', pick, true); removeEventListener('keydown', esc, true); box.remove(); done(value); };
+  const finish = (value) => { delete window.__coworkCancelPick; removeEventListener('mousemove', move, true); removeEventListener('click', pick, true); removeEventListener('keydown', esc, true); box.remove(); done(value); };
   const esc = (e) => { if (e.key === 'Escape') finish(null); };
   const pick = (e) => {
     e.preventDefault(); e.stopPropagation();
@@ -161,15 +161,24 @@ const PICK_JS = `new Promise((done) => {
     const b = e.target.getBoundingClientRect();
     finish({ selector: parts.join(' > '), text: (e.target.innerText || '').slice(0, 500), html: e.target.outerHTML.slice(0, 1500), box: { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) }, url: location.href });
   };
+  window.__coworkCancelPick = () => finish(null);
   addEventListener('mousemove', move, true); addEventListener('click', pick, true); addEventListener('keydown', esc, true);
 })`;
 
+let pickRun = 0, pickPage = null;
 async function startPick() {
-  if (state.picking) return;
+  // A second press lets go: it ends the pick in the page and frees the button even if that page is gone.
+  if (state.picking) {
+    pickRun++; state.picking = false; pushState();
+    if (pickPage && !pickPage.isDestroyed()) pickPage.executeJavaScript('window.__coworkCancelPick?.()', true).catch(() => {});
+    return;
+  }
+  const run = ++pickRun;
   state.picking = true;
   pushState();
-  const wc = current().view.webContents;
+  const wc = pickPage = current().view.webContents;
   const picked = await wc.executeJavaScript(PICK_JS, true).catch(() => null);
+  if (run !== pickRun) return;
   state.picking = false;
   if (picked) {
     // The element matters more than the picture, so a failed capture must not lose it.
@@ -278,6 +287,8 @@ const agent = {
   testClick: async ({ x, y }) => { await clickAt(x, y); return {}; },
   testInsert: async ({ text }) => { await page().insertText(text); return {}; },
   testUi: ({ js }) => win.webContents.executeJavaScript(js, true),
+  testClipboard: ({ text, png }) => { clipboard.clear(); if (png) clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png, 'base64'))); else clipboard.writeText(text ?? ''); return {}; },
+  testKey: ({ key, mods = [] }) => { win.focus(); win.webContents.focus(); for (const type of ['keyDown', 'char', 'keyUp']) win.webContents.sendInputEvent({ type, keyCode: key, modifiers: mods }); return {}; },
   pageEval: ({ js }) => evaluate(js),
   quit: () => { setTimeout(() => app.quit(), 50); return {}; },
 };

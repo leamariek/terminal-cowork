@@ -65,6 +65,12 @@ try:
     p = js("picked"); check("pointed element saved with a screenshot", os.path.exists(p.get("screenshot", "")))
     check("Point writes into the Claude prompt", wait(lambda: "the element I pointed at" in ui(term_text)))
     ui("send('input','\\u0003'),1")
+    before = cw("picked").stdout
+    ui("send('point'),1"); check("Point turns on", wait(lambda: ui("Boolean(view.picking)") is True))
+    ui("send('point'),1"); check("second Point press lets go", wait(lambda: ui("Boolean(view.picking)") is False))
+    js("click", "120", "110"); time.sleep(0.6)
+    check("after letting go, a click is a normal click", cw("picked").stdout == before)
+    check("pick listeners are gone from the page", cw("call", "pageEval", json.dumps({"js": "typeof window.__coworkCancelPick"})).stdout.strip().strip('"') == "undefined")
     d = S + "/pv"
     for f, want in (("a.md", "Heading"), ("a.csv", "Lea, K"), ("a.xlsx", "sheetcell"), ("a.png", "a.png"), ("a.mp4", "a.mp4")):
         js("preview", d + "/" + f); check("preview " + f, want in js("snapshot")["text"])
