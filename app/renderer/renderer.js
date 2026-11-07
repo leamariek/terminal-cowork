@@ -27,13 +27,21 @@ function addTerminal({ id, kind, name }) {
   xterm.open(pane);
   xterm.onData((d) => send('input', { id, d }));
   xterm.onResize((s) => send('resize', { id, ...s }));
+  // Copy and paste work like Windows Terminal: Ctrl+C copies only when text is selected (otherwise it interrupts),
+  // Ctrl+Shift+C always copies, Ctrl+V, Ctrl+Shift+V and Shift+Insert paste, right-click copies a selection or pastes.
+  const copy = () => { if (xterm.hasSelection()) send('copy', xterm.getSelection()); xterm.clearSelection(); };
   xterm.attachCustomKeyEventHandler((e) => {
-    if (e.type !== 'keydown' || !e.ctrlKey) return true;
-    if (e.key === 'c' && xterm.hasSelection()) { send('copy', xterm.getSelection()); xterm.clearSelection(); return false; }
-    if (e.key === 'v') { send('paste'); return false; }
-    if (e.shiftKey && e.key.toLowerCase() === 't') { send('termNew', 'claude'); return false; }
+    if (e.type !== 'keydown') return true;
+    const k = e.key.toLowerCase();
+    const take = (fn) => { e.preventDefault(); fn(); return false; };
+    if (e.shiftKey && !e.ctrlKey && e.key === 'Insert') return take(() => send('paste', id));
+    if (!e.ctrlKey || e.altKey) return true;
+    if (k === 'c' && (e.shiftKey || xterm.hasSelection())) return take(copy);
+    if (k === 'v') return take(() => send('paste', id));
+    if (e.shiftKey && k === 't') return take(() => send('termNew', 'claude'));
     return true;
   });
+  pane.addEventListener('contextmenu', (e) => { e.preventDefault(); if (xterm.hasSelection()) copy(); else send('paste', id); xterm.focus(); });
   terminals.set(id, { id, kind, name, xterm, fit, pane });
   showTerminal(id);
 }
@@ -71,7 +79,10 @@ Promise.all([document.fonts.load("13px 'JetBrains Mono'"), document.fonts.load("
 on('termAdded', addTerminal);
 on('termClosed', ({ id }) => removeTerminal(id));
 on('pty', ({ id, d }) => terminals.get(id)?.xterm.write(d));
-on('pasted', (text) => term?.paste(text));
+on('pasted', ({ id, text, raw }) => {
+  const t = terminals.get(id)?.xterm ?? term;
+  if (raw) send('input', { id, d: raw }); else t?.paste(text);   // raw: an image, which Claude Code reads from the clipboard itself on Ctrl+V.
+});
 on('focusTerminal', () => term?.focus());
 
 // ---- Layout ----

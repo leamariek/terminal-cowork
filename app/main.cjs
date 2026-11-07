@@ -1,5 +1,5 @@
 // The window: chrome, real browser tabs, and the bridge to the backend inside WSL.
-const { app, BrowserWindow, WebContentsView, clipboard, ipcMain, nativeImage, session, shell } = require('electron');
+const { app, BrowserWindow, ClipboardItem, WebContentsView, clipboard, ipcMain, session, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const { appendFileSync, existsSync, readFileSync } = require('node:fs');
 const path = require('node:path');
@@ -287,7 +287,13 @@ const agent = {
   testClick: async ({ x, y }) => { await clickAt(x, y); return {}; },
   testInsert: async ({ text }) => { await page().insertText(text); return {}; },
   testUi: ({ js }) => win.webContents.executeJavaScript(js, true),
-  testClipboard: ({ text, png }) => { clipboard.clear(); if (png) clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png, 'base64'))); else clipboard.writeText(text ?? ''); return {}; },
+  testClipboard: async ({ text, png }) => {
+    clipboard.clear();
+    if (png) await clipboard.write([new ClipboardItem({ 'image/png': new Blob([Buffer.from(png, 'base64')], { type: 'image/png' }) })]);
+    else await clipboard.writeText(text ?? '');
+    return {};
+  },
+  testClipboardRead: async () => ({ text: await clipboard.readText(), png: await clipboard.has('image/png'), types: (await clipboard.read()).flatMap((i) => i.types) }),
   testKey: ({ key, mods = [] }) => { win.focus(); win.webContents.focus(); for (const type of ['keyDown', 'char', 'keyUp']) win.webContents.sendInputEvent({ type, keyCode: key, modifiers: mods }); return {}; },
   pageEval: ({ js }) => evaluate(js),
   quit: () => { setTimeout(() => app.quit(), 50); return {}; },
@@ -339,8 +345,13 @@ ipcMain.on('closeTab', (_e, id) => closeTab(id));
 ipcMain.on('switchTab', (_e, id) => switchTo(id));
 ipcMain.on('hold', () => { state.hold = !state.hold; pushState(); });
 ipcMain.on('point', () => startPick());
-ipcMain.on('copy', (_e, text) => clipboard.writeText(text));
-ipcMain.on('paste', () => ui('pasted', clipboard.readText()));
+// The clipboard API is asynchronous since Electron 45, and readImage is gone: has('image/png') tells an image apart.
+ipcMain.on('copy', (_e, text) => { clipboard.writeText(text).catch(() => {}); });
+ipcMain.on('paste', async (_e, id) => {
+  const text = await clipboard.readText().catch(() => '');
+  if (text) return ui('pasted', { id, text });
+  if (await clipboard.has('image/png').catch(() => false)) ui('pasted', { id, raw: '\x16' });
+});
 ipcMain.on('openExternal', (_e, url) => { if (/^https?:/.test(url)) shell.openExternal(url); });
 
 // Film recorder: writes the window's own pixels to disk, so nothing outside the app can ever be captured.

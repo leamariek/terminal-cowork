@@ -71,6 +71,29 @@ try:
     js("click", "120", "110"); time.sleep(0.6)
     check("after letting go, a click is a normal click", cw("picked").stdout == before)
     check("pick listeners are gone from the page", cw("call", "pageEval", json.dumps({"js": "typeof window.__coworkCancelPick"})).stdout.strip().strip('"') == "undefined")
+    # Copy and paste the Windows Terminal way.
+    def keyp(k, mods): js("call", "testKey", json.dumps({"key": k, "mods": mods})); time.sleep(0.5)
+    def fresh(): ui("send('input','\\u0003clear\\r'),1"); time.sleep(0.6)
+    fresh(); js("call", "testClipboard", json.dumps({"text": "PASTEONE"})); keyp("v", ["control"])
+    check("Ctrl+V pastes once", ui(term_text).count("PASTEONE") == 1, ui(term_text).count("PASTEONE"))
+    fresh(); js("call", "testClipboard", json.dumps({"text": "PASTETWO"})); keyp("V", ["control", "shift"])
+    check("Ctrl+Shift+V pastes once", ui(term_text).count("PASTETWO") == 1)
+    fresh(); js("call", "testClipboard", json.dumps({"text": "PASTEINS"})); keyp("Insert", ["shift"])
+    check("Shift+Insert pastes", ui(term_text).count("PASTEINS") == 1)
+    fresh(); ui("send('input','echo COPY\"\"ME; sleep 3\\r'),1"); time.sleep(0.5)
+    ui("(()=>{const b=term.buffer.active;for(let i=0;i<b.length;i++)if(b.getLine(i).translateToString(true)==='COPYME'){term.select(0,i,6);return 1}})()")
+    ui("window.__sent=[];window.__tap=window.__tap||term.onData(d=>__sent.push(d)),1"); keyp("C", ["control", "shift"])
+    check("Ctrl+Shift+C does not interrupt", ui("JSON.stringify(__sent)") == [], ui("JSON.stringify(__sent)"))
+    time.sleep(3); keyp("v", ["control"])
+    check("Ctrl+Shift+C copies", ui(term_text).rstrip().endswith("COPYME"), ui(term_text).rstrip()[-40:])
+    fresh(); js("call", "testClipboard", json.dumps({"text": "PASTERIGHT"}))
+    ui("document.querySelector('.term-pane.current').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true})),1"); time.sleep(0.5)
+    check("right-click pastes", ui(term_text).count("PASTERIGHT") == 1)
+    fresh(); ui("send('input','stty -iexten; cat -v\\r'),1"); time.sleep(0.4)   # -iexten: the tty must not eat Ctrl+V as literal-next.
+    png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+    js("call", "testClipboard", json.dumps({"png": png})); keyp("v", ["control"]); ui("send('input','\\r'),1"); time.sleep(0.4)
+    check("Ctrl+V with an image passes Ctrl+V on for Claude Code", "^V" in ui(term_text), ui(term_text).rstrip()[-40:])
+    ui("send('input','\\u0004'),1"); time.sleep(0.3)
     d = S + "/pv"
     for f, want in (("a.md", "Heading"), ("a.csv", "Lea, K"), ("a.xlsx", "sheetcell"), ("a.png", "a.png"), ("a.mp4", "a.mp4")):
         js("preview", d + "/" + f); check("preview " + f, want in js("snapshot")["text"])

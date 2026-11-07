@@ -62,6 +62,8 @@ Inside the browser:
 
 Inside a terminal, Ctrl+Shift+T starts a new Claude Code session.
 
+Copy and paste in a terminal work like Windows Terminal: Ctrl+C copies selected text (without a selection it interrupts), Ctrl+Shift+C always copies, Ctrl+V, Ctrl+Shift+V and Shift+Insert paste, and right-click copies a selection or pastes. With a screenshot on the clipboard, Ctrl+V goes through to Claude Code, which attaches the image.
+
 ## How it works
 
 ```
