@@ -26,9 +26,19 @@ function addTerminal({ id, kind, name }) {
   xterm.loadAddon(fit);
   xterm.open(pane);
   xterm.onData((d) => send('input', { id, d }));
+  // OSC 52: full-screen apps like Claude Code capture the mouse, select text themselves and hand it over as
+  // ESC ] 52 ; c ; <base64> BEL. Write it to the system clipboard (queries with "?" are never answered).
+  xterm.parser.registerOscHandler(52, (data) => {
+    const b64 = data.slice(data.indexOf(';') + 1);
+    if (b64 && b64 !== '?') {
+      try { send('copy', new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))); } catch { /* Not base64: ignore. */ }
+    }
+    return true;
+  });
   xterm.onResize((s) => send('resize', { id, ...s }));
   // Copy and paste work like Windows Terminal: Ctrl+C copies only when text is selected (otherwise it interrupts),
   // Ctrl+Shift+C always copies, Ctrl+V, Ctrl+Shift+V and Shift+Insert paste, right-click copies a selection or pastes.
+  // While an app captures the mouse, Shift+drag still makes a terminal selection.
   const copy = () => { if (xterm.hasSelection()) send('copy', xterm.getSelection()); xterm.clearSelection(); };
   xterm.attachCustomKeyEventHandler((e) => {
     if (e.type !== 'keydown') return true;
