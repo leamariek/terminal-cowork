@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import pty from 'node-pty';
-import { claudeFlags, dataDir } from '../src/claude-config.js';
+import { claudeFlags, dataDir, prepareGrok } from '../src/claude-config.js';
 import { buildPreview, setFileUrl } from '../src/preview.js';
 import { socketPath } from '../src/rpc.js';
 
@@ -28,21 +28,23 @@ let lastSize = { cols: 100, rows: 30 };
 const startFolder = process.env.COWORK_CWD ?? homedir();
 
 function nameFor(kind) {
-  const base = kind === 'claude' ? 'Claude Code' : 'Shell';
+  const base = { claude: 'Claude Code', grok: 'Grok' }[kind] ?? 'Shell';
   const same = [...terms.values()].filter((t) => t.kind === kind).length;
   return same ? `${base} ${same + 1}` : base;
 }
 
 function addTerminal(kind) {
   const id = ++termCount;
-  const claude = kind === 'claude';
-  const command = claude ? process.env.COWORK_SHELL_COMMAND ?? `claude ${claudeFlags(root).map(quote).join(' ')}; exec bash -l` : 'exec bash -l';
+  const isAgent = kind !== 'shell';
+  const grokHome = kind === 'grok' ? { GROK_HOME: prepareGrok(root) } : {};
+  const command = kind === 'claude' ? process.env.COWORK_SHELL_COMMAND ?? `claude ${claudeFlags(root).map(quote).join(' ')}; exec bash -l`
+    : kind === 'grok' ? 'grok; exec bash -l' : 'exec bash -l';
   const name = nameFor(kind);
   const proc = pty.spawn('bash', ['-lic', command], {
     name: 'xterm-256color', ...lastSize, cwd: startFolder,
-    env: { ...process.env, COLORTERM: 'truecolor', TERM_PROGRAM: 'terminal-cowork', COWORK_TERM: String(id) },
+    env: { ...process.env, COLORTERM: 'truecolor', TERM_PROGRAM: 'terminal-cowork', COWORK_TERM: String(id), ...grokHome },
   });
-  const entry = { id, kind, name, proc, folder: startFolder.split('/').pop(), agent: claude ? { state: 'ready', prompt: '', activity: 'Starting', since: Date.now(), subagents: 0 } : null };
+  const entry = { id, kind, name, proc, folder: startFolder.split('/').pop(), agent: isAgent ? { kind, state: 'ready', prompt: '', activity: 'Starting', since: Date.now(), subagents: 0 } : null };
   terms.set(id, entry);
   send({ t: 'termAdded', id, kind, name });
   proc.onData((d) => send({ t: 'pty', id, d }));
@@ -67,7 +69,7 @@ function describeTool(tool, input = {}) {
   if (tool === 'Grep' || tool === 'Glob') return 'Searching the project';
   if (tool === 'WebFetch' || tool === 'WebSearch') return 'Searching the web';
   if (tool === 'Task' || tool === 'Agent') return 'Starting a subagent';
-  const browser = /^mcp__cowork__(.+)$/.exec(tool ?? '');
+  const browser = /^(?:mcp__)?cowork__(.+)$/.exec(tool ?? '');
   if (browser) return `Browser: ${browser[1]}`;
   return `Using ${tool}`;
 }
