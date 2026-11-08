@@ -37,21 +37,28 @@ function addTerminal({ id, kind, name }) {
   });
   xterm.onResize((s) => send('resize', { id, ...s }));
   // Copy and paste work like Windows Terminal: Ctrl+C copies only when text is selected (otherwise it interrupts),
-  // Ctrl+Shift+C always copies, Ctrl+V, Ctrl+Shift+V and Shift+Insert paste, right-click copies a selection or pastes.
+  // Ctrl+Shift+C always copies, Ctrl+V, Ctrl+Shift+V and Shift+Insert paste natively, right-click copies a selection or pastes.
   // While an app captures the mouse, Shift+drag still makes a terminal selection.
   const copy = () => { if (xterm.hasSelection()) send('copy', xterm.getSelection()); xterm.clearSelection(); };
   xterm.attachCustomKeyEventHandler((e) => {
     if (e.type !== 'keydown') return true;
     const k = e.key.toLowerCase();
     const take = (fn) => { e.preventDefault(); fn(); return false; };
-    if (e.shiftKey && !e.ctrlKey && e.key === 'Insert') return take(() => send('paste', id));
+    // Paste keys skip xterm and keep the browser's default action: Chromium's native paste reads every clipboard
+    // format Windows apps write and hands the text to xterm's own paste handler (bracketed paste included).
+    if (e.shiftKey && !e.ctrlKey && e.key === 'Insert') return false;
     if (!e.ctrlKey || e.altKey) return true;
     if (k === 'c' && (e.shiftKey || xterm.hasSelection())) return take(copy);
-    if (k === 'v') return take(() => send('paste', id));
+    if (k === 'v') return false;
     if (e.shiftKey && k === 't') return take(() => send('termNew', 'claude'));
     if (e.key === ',') return take(openAppearance);
     return true;
   });
+  // An image-only clipboard has no text for xterm: send Ctrl+V so Claude Code reads the image from the clipboard itself.
+  pane.addEventListener('paste', (e) => {
+    const data = e.clipboardData;
+    if (data && !data.getData('text/plain') && [...data.items].some((i) => i.type.startsWith('image/'))) { e.preventDefault(); e.stopPropagation(); send('input', { id, d: '\x16' }); }
+  }, true);
   pane.addEventListener('contextmenu', (e) => { e.preventDefault(); if (xterm.hasSelection()) copy(); else send('paste', id); xterm.focus(); });
   terminals.set(id, { id, kind, name, xterm, fit, pane });
   showTerminal(id);
