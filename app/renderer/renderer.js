@@ -31,7 +31,10 @@ function addTerminal({ id, kind, name }) {
   xterm.parser.registerOscHandler(52, (data) => {
     const b64 = data.slice(data.indexOf(';') + 1);
     if (b64 && b64 !== '?') {
-      try { send('copy', new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))); } catch { /* Not base64: ignore. */ }
+      try {
+        const text = new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+        navigator.clipboard.writeText(text).catch(() => send('copy', text));   // Chromium's clipboard first, the main process if it refuses.
+      } catch { /* Not base64: ignore. */ }
     }
     return true;
   });
