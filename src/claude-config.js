@@ -6,6 +6,10 @@ import { join, resolve } from 'node:path';
 // The events that drive the Agents board.
 const AGENT_EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SubagentStart', 'SubagentStop'];
 
+// A hook command is a shell line: quote each path for a POSIX shell, with forward slashes, so an install under a
+// path with spaces or $ (C:\Program Files, Git Bash on Windows) still runs.
+const run = (root, script) => [process.execPath, resolve(root, script)].map((p) => `'${p.replace(/\\/g, '/').replace(/'/g, `'\\''`)}'`).join(' ');
+
 export const dataDir = process.env.COWORK_DATA_DIR ?? join(homedir(), '.local/share/terminal-cowork');   // Tests get their own.
 
 export function claudeFlags(root) {
@@ -16,8 +20,8 @@ export function claudeFlags(root) {
   writeFileSync(mcp, JSON.stringify({ mcpServers: { cowork: { command: process.execPath, args: [resolve(root, 'src/mcp.js')] } } }, null, 2));
   writeFileSync(settings, JSON.stringify({
     hooks: {
-      PostToolUse: [{ matcher: 'Write|Edit|Bash', hooks: [{ type: 'command', command: `${process.execPath} ${resolve(root, 'src/autopreview.js')}` }] }],
-      ...Object.fromEntries(AGENT_EVENTS.map((event) => [event, [{ hooks: [{ type: 'command', command: `${process.execPath} ${resolve(root, 'src/agent-hook.js')}` }] }]])),
+      PostToolUse: [{ matcher: 'Write|Edit|Bash', hooks: [{ type: 'command', command: run(root, 'src/autopreview.js') }] }],
+      ...Object.fromEntries(AGENT_EVENTS.map((event) => [event, [{ hooks: [{ type: 'command', command: run(root, 'src/agent-hook.js') }] }]])),
     },
   }, null, 2));
   writeFileSync(prompt, readFileSync(resolve(root, 'skills/cowork/SKILL.md'), 'utf8').replace(/^---[\s\S]*?---\s*/, ''));
@@ -38,7 +42,7 @@ export function prepareGrok(root) {
     if (name !== 'config.toml' && !lstatSync(link, { throwIfNoEntry: false })) symlinkSync(join(real, name), link);
   }
   const toml = (s) => JSON.stringify(s);
-  const hook = (event, script) => `[[hooks.${event}]]\n  [[hooks.${event}.hooks]]\n  type = "command"\n  command = ${toml(`${process.execPath} ${resolve(root, script)}`)}\n  timeout = 10\n`;
+  const hook = (event, script) => `[[hooks.${event}]]\n  [[hooks.${event}.hooks]]\n  type = "command"\n  command = ${toml(run(root, script))}\n  timeout = 10\n`;
   const own = existsSync(join(real, 'config.toml')) ? readFileSync(join(real, 'config.toml'), 'utf8') : '';
   const added = [`[mcp_servers.cowork]\ncommand = ${toml(process.execPath)}\nargs = [${toml(resolve(root, 'src/mcp.js'))}]\n`,
     ...AGENT_EVENTS.map((e) => hook(e, 'src/agent-hook.js')), hook('PostToolUse', 'src/autopreview.js')].join('\n');
