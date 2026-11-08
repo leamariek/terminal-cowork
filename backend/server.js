@@ -1,6 +1,8 @@
-// Runs inside WSL. Owns the terminal and the agent socket, and talks to the window over stdin and stdout.
+// Runs inside WSL (or Linux), or natively on Windows when the person picks that. Owns the terminals and the agent
+// socket, and talks to the window over stdin and stdout.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
@@ -13,6 +15,17 @@ import { scanSessions } from '../src/sessions.js';
 import { socketPath } from '../src/rpc.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const WIN = process.platform === 'win32';
+// Started through the Electron binary (ELECTRON_RUN_AS_NODE): only this process needs that, terminals must not inherit it.
+delete process.env.ELECTRON_RUN_AS_NODE;
+// Native Windows: a per-session named pipe and token, set before the first terminal so hooks and MCP inherit both.
+if (WIN) {
+  process.env.COWORK_SOCK = `\\\\.\\pipe\\terminal-cowork-${randomBytes(8).toString('hex')}`;
+  process.env.COWORK_TOKEN = randomBytes(24).toString('hex');
+}
+// PowerShell 7 when installed, otherwise the Windows PowerShell every Windows has.
+const winShell = () => { try { execFileSync('where.exe', ['pwsh'], { stdio: 'ignore', windowsHide: true }); return 'pwsh.exe'; } catch { return 'powershell.exe'; } };
+const shellFile = WIN ? winShell() : 'bash';
 const stateDir = join(dataDir, 'state');
 mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 if (process.env.COWORK_WINDOWS === '1') {
@@ -21,14 +34,14 @@ if (process.env.COWORK_WINDOWS === '1') {
 }
 
 const send = (msg) => process.stdout.write(JSON.stringify(msg) + '\n');
-const quote = (a) => `'${a.replace(/'/g, `'\\''`)}'`;
+const quote = (a) => `'${a.replace(/'/g, WIN ? "''" : `'\\''`)}'`;   // PowerShell doubles a single quote.
 
 // Every terminal is its own PTY. The first one starts Claude Code, later ones are whatever the person adds.
 const terms = new Map();
 const early = [];
 let termCount = 0;
 let lastSize = { cols: 100, rows: 30 };
-const startFolder = process.env.COWORK_CWD ?? homedir();
+const startFolder = process.env.COWORK_CWD && existsSync(process.env.COWORK_CWD) ? process.env.COWORK_CWD : homedir();   // A WSL path means nothing on native Windows.
 
 function nameFor(kind) {
   const base = { claude: 'Claude Code', grok: 'Grok' }[kind] ?? 'Shell';
@@ -44,11 +57,13 @@ function addTerminal(kind, opts = {}) {
   const grokHome = kind === 'grok' ? { GROK_HOME: prepareGrok(root) } : {};
   const r = opts.resume ?? {};
   const resume = r.claude ? ['--resume', r.claude, ...(r.working ? ['The app restarted while you were working. Continue where you left off.'] : [])] : [];
-  const command = kind === 'claude' ? process.env.COWORK_SHELL_COMMAND ?? `claude ${[...claudeFlags(root), ...resume].map(quote).join(' ')}; exec bash -l`
-    : kind === 'grok' ? 'grok; exec bash -l'
-      : r.tmux ? `tmux attach -t ${quote(r.tmux)}; exec bash -l` : 'exec bash -l';
+  const tail = WIN ? '' : '; exec bash -l', run = WIN ? '& ' : '';   // Bash keeps a shell after the agent exits; PowerShell uses -NoExit.
+  const command = kind === 'claude' ? process.env.COWORK_SHELL_COMMAND ?? `${run}claude ${[...claudeFlags(root), ...resume].map(quote).join(' ')}${tail}`
+    : kind === 'grok' ? `${run}grok${tail}`
+      : WIN ? '' : r.tmux ? `tmux attach -t ${quote(r.tmux)}${tail}` : 'exec bash -l';
+  const args = !WIN ? ['-lic', command] : command ? ['-NoLogo', '-NoExit', '-Command', command] : ['-NoLogo'];
   const name = opts.name ?? nameFor(kind);
-  const proc = pty.spawn('bash', ['-lic', command], {
+  const proc = pty.spawn(shellFile, args, {
     name: 'xterm-256color', ...lastSize, cwd,
     env: { ...process.env, COLORTERM: 'truecolor', TERM_PROGRAM: 'terminal-cowork', COWORK_TERM: String(id), ...grokHome },
   });
@@ -221,7 +236,10 @@ async function handle(method, params) {
 }
 
 const sock = socketPath();
-rmSync(sock, { force: true });
+const pipe = sock.startsWith('\\\\.\\pipe\\');   // A named pipe has no file to remove and no mode bits; the token guards it.
+const token = Buffer.from(process.env.COWORK_TOKEN ?? '');
+const allowed = (t) => !pipe || (typeof t === 'string' && t.length === token.length && timingSafeEqual(Buffer.from(t), token));
+if (!pipe) rmSync(sock, { force: true });
 const server = createServer((c) => {
   let buf = '';
   c.on('error', () => {});
@@ -229,18 +247,19 @@ const server = createServer((c) => {
     buf += d;
     const end = buf.indexOf('\n');
     if (end < 0) return;
-    const { method, params } = JSON.parse(buf.slice(0, end));
+    const { method, params, token: given } = JSON.parse(buf.slice(0, end));
     buf = '';
+    if (!allowed(given)) { c.end(JSON.stringify({ error: 'Not allowed' }) + '\n'); return; }
     const reply = await handle(method, params ?? {}).then((result) => ({ result: result ?? null }), (e) => ({ error: e.message }));
     c.end(JSON.stringify(reply) + '\n');
   });
 });
-server.listen(sock, () => chmodSync(sock, 0o600));
+server.listen(sock, () => { if (!pipe) chmodSync(sock, 0o600); });
 
 function quit() {
   saveRestore();   // Before the terminals close, so the next start can bring them back.
   server.close();
-  rmSync(sock, { force: true });
+  if (!pipe) rmSync(sock, { force: true });
   for (const t of terms.values()) t.proc.kill();
   process.exit(0);
 }

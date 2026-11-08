@@ -27,28 +27,43 @@ const current = () => tabs.find((t) => t.id === active);
 
 // ---- Backend ----
 
+// Where terminals run. On Windows the person picks WSL (the build writes config.json for it) or native Windows;
+// on Linux the backend simply runs here. The choice is kept per user and takes effect on the next start.
+const wslConfig = () => { const f = path.join(__dirname, 'config.json'); return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null; };
+const modeFile = () => path.join(app.getPath('userData'), 'backend.json');
+function backendMode() {
+  if (process.platform !== 'win32') return 'native';
+  let chosen;
+  try { chosen = JSON.parse(readFileSync(modeFile(), 'utf8')).mode; } catch { /* Not chosen yet. */ }
+  if (chosen === 'windows' || (chosen === 'wsl' && wslConfig())) return chosen;
+  return wslConfig() ? 'wsl' : 'windows';
+}
+// The packaged app carries a copy of the backend for native Windows; a checkout runs the one next to app/.
+const nativeBackend = () => (app.isPackaged ? path.join(process.resourcesPath, 'native', 'backend', 'server.js') : path.join(__dirname, '../backend/server.js'));
+
 function startBackend() {
   const startFolder = process.argv.find((a) => a.startsWith('--cwd='))?.slice(6); // From the terminal-cowork command.
-  const configFile = path.join(__dirname, 'config.json');
-  const config = existsSync(configFile) ? JSON.parse(readFileSync(configFile, 'utf8')) : null;
-  // The Windows build runs its backend in WSL and writes config.json for it; without the file there is no WSL side
-  // to start, so say so instead of failing on a missing field.
-  if (process.platform === 'win32' && !config) {
-    dialog.showErrorBox('terminal-cowork needs WSL', 'This copy has no WSL setup (app\\config.json is missing).\n\nBuild it inside WSL with "node scripts/package-windows.mjs" and use the folder it writes to dist.');
+  const mode = backendMode(), config = wslConfig();
+  const side = mode === 'wsl' ? 'WSL side' : 'terminal side';
+  if (mode === 'windows' && !existsSync(nativeBackend())) {
+    dialog.showErrorBox('terminal-cowork', `This copy has neither a WSL setup nor the native Windows backend (${nativeBackend()} is missing).\n\nBuild it with "node scripts/package-windows.mjs" and use the folder it writes to dist.`);
     app.exit(1);
     return;
   }
-  backend = process.platform === 'win32'
+  backend = mode === 'wsl'
     ? spawn('wsl.exe', ['-d', config.distro, '--cd', '~', '--', 'env', 'COWORK_WINDOWS=1', ...(startFolder ? [`COWORK_CWD=${startFolder}`] : []), `PATH=${config.path}`, `COWORK_SOCK=${config.sock}`, `XDG_RUNTIME_DIR=${config.runtime}`, config.node, config.backend], { stdio: 'pipe', windowsHide: true })
-    : spawn(process.env.COWORK_NODE ?? 'node', [path.join(__dirname, '../backend/server.js')], { stdio: 'pipe' });
+    : mode === 'windows'
+      // The app's own binary runs the backend as plain Node, so Windows needs no separate Node install.
+      ? spawn(process.execPath, [nativeBackend()], { stdio: 'pipe', windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ...(startFolder ? { COWORK_CWD: startFolder } : {}) } })
+      : spawn(process.env.COWORK_NODE ?? 'node', [path.join(__dirname, '../backend/server.js')], { stdio: 'pipe' });
   const logFile = path.join(app.getPath('userData'), 'backend.log');
   const note = (text) => { try { appendFileSync(logFile, `${new Date().toISOString()} ${text}\n`); } catch { /* Logging must never stop the app. */ } };
   backend.stderr.on('data', (d) => note(d.toString()));
-  backend.on('error', (e) => { note(`start failed: ${e.message}`); ui('notice', `Could not reach WSL: ${e.message}`); });
+  backend.on('error', (e) => { note(`start failed: ${e.message}`); ui('notice', `Could not start the ${side}: ${e.message}`); });
   readline.createInterface({ input: backend.stdout }).on('line', (line) => {
     try { onBackend(line); } catch (e) { note(`bad line: ${line.slice(0, 300)} ${e.message}`); }
   });
-  backend.on('exit', (code) => { note(`backend exited ${code}`); if (!app.isQuitting) ui('notice', 'The WSL side stopped. Reopen terminal-cowork to continue.'); });
+  backend.on('exit', (code) => { note(`backend exited ${code}`); if (!app.isQuitting) ui('notice', `The ${side} stopped. Reopen terminal-cowork to continue.`); });
 }
 
 const toBackend = (msg) => backend?.stdin.write(JSON.stringify(msg) + '\n');
@@ -355,8 +370,15 @@ function sendAppearance() {
   const a = readAppearance();
   const custom = existsSync(customFile()) ? `data:image/jpeg;base64,${readFileSync(customFile()).toString('base64')}` : null;
   const list = JSON.parse(readFileSync(path.join(__dirname, 'renderer/wallpapers/wallpapers.json'), 'utf8'));
-  ui('appearance', { ...a, custom, list });
+  ui('appearance', { ...a, custom, list, terminals: { platform: process.platform, mode: backendMode(), wsl: Boolean(wslConfig()) } });
 }
+// Switching where terminals run needs a fresh backend, so the app restarts.
+ipcMain.on('terminalsMode', (_e, mode) => {
+  if (process.platform !== 'win32' || !['wsl', 'windows'].includes(mode) || (mode === 'wsl' && !wslConfig())) return;
+  writeFileSync(modeFile(), JSON.stringify({ mode }));
+  app.relaunch();
+  app.quit();
+});
 ipcMain.on('appearance', (_e, change) => {
   writeFileSync(appearanceFile(), JSON.stringify({ ...readAppearance(), ...change }));
   sendAppearance();

@@ -11,6 +11,7 @@ const RECENT_MS = 10 * 60 * 1000; // Finished work stays on the card this long, 
 
 // A record is live only if its pid still runs the same process: pids get reused.
 function alive(s) {
+  if (process.platform === 'win32') { try { process.kill(s.pid, 0); return true; } catch { return false; } }   // No /proc on Windows.
   try {
     const stat = readFileSync(`/proc/${s.pid}/stat`, 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');

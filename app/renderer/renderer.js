@@ -370,7 +370,7 @@ setInterval(renderBoard, 1000);
 
 // ---- Appearance: Light, or Glass over a wallpaper, laid out like System Settings > Appearance on macOS 27. ----
 
-let look = { mode: 'light', wallpaper: 'tahoe', tint: 0.5, custom: null, list: [] };
+let look = { mode: 'light', wallpaper: 'tahoe', tint: 0.5, custom: null, list: [], terminals: null };
 // In Glass the terminal draws no background of its own, so the frosted pane behind it shows.
 const DARK = {
   background: 'rgba(0,0,0,0)', foreground: '#f2f2f7', cursor: '#f2f2f7', cursorAccent: '#1c1c1e', selectionBackground: 'rgba(100,160,255,0.4)',
@@ -415,6 +415,15 @@ function applyAppearance() {
 }
 
 function renderAppearance() {
+  const run = look.terminals ?? {};
+  document.body.classList.toggle('win', run.platform === 'win32');
+  for (const b of document.querySelectorAll('[data-run]')) {
+    const on = b.dataset.run === run.mode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+    b.disabled = b.dataset.run === 'wsl' && !run.wsl;
+  }
+  $('terminals-note').textContent = run.wsl ? 'Switching restarts terminal-cowork.' : 'This copy has no WSL setup, so terminals run in Windows.';
   for (const tile of document.querySelectorAll('.tile')) {
     const on = tile.dataset.mode === look.mode;
     tile.classList.toggle('on', on);
@@ -465,6 +474,7 @@ $('row-appearance').addEventListener('click', openAppearance);
 $('appearance-done').addEventListener('click', closeAppearance);
 $('sheet-veil').addEventListener('mousedown', (e) => { if (e.target === $('sheet-veil')) closeAppearance(); });
 for (const tile of document.querySelectorAll('.tile')) tile.addEventListener('click', () => send('appearance', { mode: tile.dataset.mode }));
+for (const b of document.querySelectorAll('[data-run]')) b.addEventListener('click', () => { if (!b.classList.contains('on') && !b.disabled) send('terminalsMode', b.dataset.run); });
 $('tint').addEventListener('input', () => {
   look.tint = $('tint').value / 100;   // Live while dragging, saved when let go.
   document.body.style.setProperty('--tint', String(look.tint));

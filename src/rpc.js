@@ -1,4 +1,6 @@
-// Same-user control channel: newline-delimited JSON over a Unix socket inside the private runtime directory.
+// Same-user control channel: newline-delimited JSON over a Unix socket inside the private runtime directory, or on
+// native Windows over a named pipe. A pipe can be opened by other local accounts, so there every request carries the
+// session's random token (COWORK_TOKEN, inherited by the terminals, hooks and MCP server the app starts).
 import { connect } from 'node:net';
 import { join } from 'node:path';
 
@@ -14,7 +16,7 @@ export function call(method, params = {}, timeoutMs = 30000) {
     const sock = connect(socketPath());
     let buf = '';
     const timer = setTimeout(() => { sock.destroy(); reject(new Error(`${method} timed out`)); }, timeoutMs);
-    sock.once('connect', () => sock.write(JSON.stringify({ method, params }) + '\n'));
+    sock.once('connect', () => sock.write(JSON.stringify({ method, params, token: process.env.COWORK_TOKEN }) + '\n'));
     sock.on('data', (d) => {
       buf += d;
       const end = buf.indexOf('\n');

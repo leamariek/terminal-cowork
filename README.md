@@ -20,7 +20,7 @@ You and Claude share the same browser. Claude opens pages, clicks, types and rea
 
 ## Requirements
 
-terminal-cowork is built for Windows with WSL: the window runs on Windows, while the backend, Claude Code and your agents run inside WSL. That is the main path and the one we use. A native Windows backend without WSL is welcome as an additional option, see [issue #1](https://github.com/leamariek/terminal-cowork/issues/1).
+terminal-cowork runs its terminals either inside WSL or natively on Windows. WSL is the default and the path the project is built on: the window runs on Windows, while the backend, Claude Code and your agents run inside WSL. You can switch under Appearance, Terminals (see [Native Windows](#native-windows)).
 
 - Windows 11 with WSL2 and an Ubuntu distribution
 - Node.js 22 or later inside WSL
@@ -49,6 +49,12 @@ terminal-cowork
 ```
 
 The build is not code signed, so Windows SmartScreen may warn on first launch.
+
+### Native Windows
+
+Under Appearance, Terminals, pick **Windows** instead of WSL; the app restarts. Terminals then open in PowerShell 7 (or Windows PowerShell), and Claude Code and Grok start from there, so they need to be installed on Windows. The build carries its own copy of the backend, and the app runs it on its own binary, so no separate Node.js is needed. Claude reaches the window over a named pipe, and every request carries a per-session token, because other local accounts can open a pipe. PDF previews use the built-in viewer when `pdftoppm` is missing, and Excel previews need Python 3 with `openpyxl` (`py` or `python`).
+
+Native Windows is newer and less tested than WSL. Reports are welcome in [issue #1](https://github.com/leamariek/terminal-cowork/issues/1).
 
 ## Shortcuts
 

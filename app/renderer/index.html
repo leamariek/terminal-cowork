@@ -85,6 +85,16 @@
     <h3 class="glass-only">Wallpaper</h3>
     <div class="group glass-only"><div id="wallpapers" role="radiogroup" aria-label="Wallpaper"></div></div>
     <p id="wallpaper-credit" class="glass-only"></p>
+    <h3 class="win-only">Terminals</h3>
+    <div class="group win-only">
+      <div class="setting">
+        <span class="label">Run terminals in<small id="terminals-note">Switching restarts terminal-cowork.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Run terminals in">
+          <button role="radio" data-run="wsl">WSL</button>
+          <button role="radio" data-run="windows">Windows</button>
+        </div>
+      </div>
+    </div>
   </section>
 </div>
 <script src="vendor/xterm.js"></script>

@@ -59,6 +59,14 @@ wb = openpyxl.load_workbook(sys.argv[1], read_only=True, data_only=True)
 print(json.dumps({ws.title: [["" if c is None else str(c) for c in r] for _, r in zip(range(${MAX_ROWS}), ws.iter_rows(values_only=True))] for ws in wb}))
 `;
 
+// Python is python3 on Linux and usually py or python on Windows; openpyxl reads the workbook.
+function readXlsx(file) {
+  for (const py of process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3']) {
+    try { return execFileSync(py, [...(py === 'py' ? ['-3'] : []), '-P', '-c', XLSX_READER, file], { maxBuffer: 1 << 28, windowsHide: true }); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  }
+  throw new Error('Excel preview needs Python 3 with openpyxl');
+}
+
 function renderPdf(file, dir) {
   const out = join(dir, 'pdf');
   rmSync(out, { recursive: true, force: true });
@@ -80,9 +88,14 @@ export function buildPreview(input, stateDir) {
   if (IMAGE.has(ext)) body = `<div class="center"><img src="${esc(url)}"></div>`;
   else if (VIDEO.has(ext)) body = `<video src="${esc(url)}" controls autoplay muted loop></video>`;
   else if (AUDIO.has(ext)) body = `<audio src="${esc(url)}" controls></audio>`;
-  else if (ext === '.pdf') body = renderPdf(file, stateDir);
+  else if (ext === '.pdf') {
+    try { body = renderPdf(file, stateDir); } catch (e) {
+      if (e.code === 'ENOENT') return url;   // No pdftoppm (usual on Windows): the browser's own PDF viewer shows it.
+      throw e;
+    }
+  }
   else if (ext === '.xlsx' || ext === '.xlsm') {
-    const sheets = JSON.parse(execFileSync('python3', ['-P', '-c', XLSX_READER, file], { maxBuffer: 1 << 28 }));
+    const sheets = JSON.parse(readXlsx(file));
     body = Object.entries(sheets).map(([n, rows]) => `<h2>${esc(n)}</h2>${table(rows)}`).join('');
   } else {
     if (stat.size > MAX_TEXT) throw new Error(`Too large to preview as text: ${file}`);
