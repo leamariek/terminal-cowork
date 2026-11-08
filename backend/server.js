@@ -3,15 +3,16 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import pty from 'node-pty';
 import { claudeFlags, dataDir, prepareGrok } from '../src/claude-config.js';
 import { buildPreview, setFileUrl } from '../src/preview.js';
 import { scanSessions } from '../src/sessions.js';
 import { socketPath } from '../src/rpc.js';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const stateDir = join(dataDir, 'state');
 mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 if (process.env.COWORK_WINDOWS === '1') {
@@ -51,7 +52,7 @@ function addTerminal(kind, opts = {}) {
     name: 'xterm-256color', ...lastSize, cwd,
     env: { ...process.env, COLORTERM: 'truecolor', TERM_PROGRAM: 'terminal-cowork', COWORK_TERM: String(id), ...grokHome },
   });
-  const entry = { id, kind, name, proc, cwd, sessionId: r.claude, folder: cwd.split('/').pop(), agent: isAgent ? { kind, state: 'ready', prompt: '', activity: r.claude ? 'Resuming' : 'Starting', since: Date.now(), subagents: 0 } : null };
+  const entry = { id, kind, name, proc, cwd, sessionId: r.claude, folder: basename(cwd), agent: isAgent ? { kind, state: 'ready', prompt: '', activity: r.claude ? 'Resuming' : 'Starting', since: Date.now(), subagents: 0 } : null };
   terms.set(id, entry);
   send({ t: 'termAdded', id, kind, name });
   proc.onData((d) => send({ t: 'pty', id, d }));
@@ -158,8 +159,8 @@ setInterval(rescan, 2000).unref();
 
 function describeTool(tool, input = {}) {
   if (tool === 'Bash') return `Running ${String(input.command ?? 'a command').split('\n')[0].slice(0, 70)}`;
-  if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit' || tool === 'NotebookEdit') return `Editing ${String(input.file_path ?? 'a file').split('/').pop()}`;
-  if (tool === 'Read') return `Reading ${String(input.file_path ?? 'a file').split('/').pop()}`;
+  if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit' || tool === 'NotebookEdit') return `Editing ${basename(String(input.file_path ?? 'a file'))}`;
+  if (tool === 'Read') return `Reading ${basename(String(input.file_path ?? 'a file'))}`;
   if (tool === 'Grep' || tool === 'Glob') return 'Searching the project';
   if (tool === 'WebFetch' || tool === 'WebSearch') return 'Searching the web';
   if (tool === 'Task' || tool === 'Agent') return 'Starting a subagent';
@@ -174,7 +175,7 @@ function agentEvent({ term, event, hook }) {
   if (!entry?.agent) return;
   const a = entry.agent;
   const move = (state, activity) => { if (a.state !== state) a.since = Date.now(); a.state = state; if (activity) a.activity = activity; };
-  if (hook.cwd) entry.folder = hook.cwd.split('/').pop();
+  if (hook.cwd) entry.folder = basename(hook.cwd);
   if (hook.session_id) entry.sessionId = hook.session_id;
   if (event === 'SessionStart') move('ready', 'Waiting for a prompt');
   else if (event === 'UserPromptSubmit') { a.prompt = String(hook.prompt ?? '').slice(0, 200); move('working', 'Thinking'); } else if (event === 'PreToolUse') move('working', describeTool(hook.tool_name, hook.tool_input));
@@ -201,7 +202,7 @@ async function handle(method, params) {
   if (method === 'agents') return agentList();
   if (method === 'preview') {
     const url = buildPreview(params.path, stateDir);
-    return ask('showPreview', { url, title: params.path.split('/').pop() });
+    return ask('showPreview', { url, title: basename(params.path) });
   }
   if (method === 'shot') {
     const { png } = await ask('shot', {});

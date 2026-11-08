@@ -2,9 +2,10 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { packager } from '@electron/packager';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const node = realpathSync(process.execPath);
 const uid = execFileSync('id', ['-u'], { encoding: 'utf8' }).trim();
 const home = process.env.HOME;
