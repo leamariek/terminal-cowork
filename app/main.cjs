@@ -31,6 +31,13 @@ function startBackend() {
   const startFolder = process.argv.find((a) => a.startsWith('--cwd='))?.slice(6); // From the terminal-cowork command.
   const configFile = path.join(__dirname, 'config.json');
   const config = existsSync(configFile) ? JSON.parse(readFileSync(configFile, 'utf8')) : null;
+  // WSL only, by design: the backend, Claude Code and the agents all live in WSL. The build writes config.json;
+  // without it there is no WSL side to start, so say so instead of failing on a missing field.
+  if (process.platform === 'win32' && !config) {
+    dialog.showErrorBox('terminal-cowork needs WSL', 'This copy has no WSL setup (app\\config.json is missing).\n\nBuild it inside WSL with "node scripts/package-windows.mjs" and use the folder it writes to dist.');
+    app.exit(1);
+    return;
+  }
   backend = process.platform === 'win32'
     ? spawn('wsl.exe', ['-d', config.distro, '--cd', '~', '--', 'env', 'COWORK_WINDOWS=1', ...(startFolder ? [`COWORK_CWD=${startFolder}`] : []), `PATH=${config.path}`, `COWORK_SOCK=${config.sock}`, `XDG_RUNTIME_DIR=${config.runtime}`, config.node, config.backend], { stdio: 'pipe', windowsHide: true })
     : spawn(process.env.COWORK_NODE ?? 'node', [path.join(__dirname, '../backend/server.js')], { stdio: 'pipe' });

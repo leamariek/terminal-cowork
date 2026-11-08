@@ -20,6 +20,8 @@ You and Claude share the same browser. Claude opens pages, clicks, types and rea
 
 ## Requirements
 
+terminal-cowork runs on Windows with WSL only, by design: the window runs on Windows, while the backend, Claude Code and your agents run inside WSL. There is no native Windows backend.
+
 - Windows 11 with WSL2 and an Ubuntu distribution
 - Node.js 22 or later inside WSL
 - [Claude Code](https://code.claude.com) inside WSL
