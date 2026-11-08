@@ -249,6 +249,10 @@ lines.on('line', (line) => {
   const m = JSON.parse(line);
   if (m.t === 'start') { if (!restore()) addTerminal('claude'); }
   else if (m.t === 'new') addTerminal(m.kind);
+  else if (m.t === 'rename') {
+    const t = terms.get(m.id), name = String(m.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (t && name) { t.name = name; send({ t: 'termRenamed', id: m.id, name }); pushAgents(); saveRestore(true); }
+  }
   else if (m.t === 'close') { terms.get(m.id)?.proc.kill(); closed(m.id); saveRestore(true); } else if (m.t === 'input') { const t = terms.get(m.id); if (t) t.proc.write(m.d); else early.push(m.d); } else if (m.t === 'resize') { lastSize = { cols: m.cols, rows: m.rows }; terms.get(m.id)?.proc.resize(m.cols, m.rows); }
   else if (m.t === 'rpcReply') {
     const w = waiting.get(m.id);

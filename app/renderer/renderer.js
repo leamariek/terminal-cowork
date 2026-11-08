@@ -89,6 +89,7 @@ Promise.all([document.fonts.load("13px 'JetBrains Mono'"), document.fonts.load("
 
 on('termAdded', addTerminal);
 on('termClosed', ({ id }) => removeTerminal(id));
+on('termRenamed', ({ id, name }) => { const t = terminals.get(id); if (t) { t.name = name; renderTerminals(); } });
 on('pty', ({ id, d }) => terminals.get(id)?.xterm.write(d));
 on('pasted', ({ id, text, raw }) => {
   const t = terminals.get(id)?.xterm ?? term;
@@ -217,6 +218,29 @@ const TERMINAL_ICON = '<svg viewBox="0 0 16 16"><path d="M3 4.5l3.5 3.5L3 11.5M8
 const CLOSE_ICON = '<svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg>';
 const agentOf = (id) => agents.find((a) => a.id === id);
 
+function renameTerminal(id, label) {
+  const t = terminals.get(id);
+  if (!t || label.querySelector('input')) return;
+  const input = document.createElement('input');
+  input.className = 'rename';
+  input.value = t.name;
+  input.setAttribute('aria-label', 'Session name');
+  input.maxLength = 60;
+  label.replaceChildren(input);
+  input.focus(); input.select();
+  let done = false;
+  const finish = (keep) => {
+    if (done) return; done = true;
+    const value = input.value.replace(/\s+/g, ' ').trim();
+    if (keep && value && value !== t.name) { t.name = value; send('termRename', { id, name: value }); }
+    renderTerminals();
+    if (id === termId) t.xterm.focus();
+  };
+  input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); });
+  input.addEventListener('blur', () => finish(true));
+  for (const ev of ['click', 'dblclick', 'mousedown']) input.addEventListener(ev, (e) => e.stopPropagation());
+}
+
 function renderTerminals() {
   const rows = [...terminals.values()].map((t) => {
     const a = agentOf(t.id);
@@ -227,6 +251,10 @@ function renderTerminals() {
     const name = document.createElement('span');
     name.className = 'name';
     name.textContent = t.name;
+    name.title = 'Double-click to rename';
+    // Rename like a Finder sidebar item: double-click or right-click the row, Enter keeps, Esc cancels.
+    el.addEventListener('dblclick', (e) => { e.preventDefault(); renameTerminal(t.id, name); });
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); renameTerminal(t.id, name); });
     el.append(name);
     if (a) { const dot = document.createElement('i'); dot.className = `dot ${a.state}`; dot.title = LANES.find((l) => l.state === a.state)?.title ?? ''; el.append(dot); }
     if (terminals.size > 1) {

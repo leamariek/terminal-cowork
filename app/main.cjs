@@ -49,7 +49,7 @@ const ui = (channel, data) => { if (win && !win.isDestroyed()) win.webContents.s
 
 function onBackend(line) {
   const m = JSON.parse(line);
-  if (m.t === 'pty' || m.t === 'termAdded' || m.t === 'termClosed' || m.t === 'agents') ui(m.t, m);
+  if (m.t === 'pty' || m.t === 'termAdded' || m.t === 'termClosed' || m.t === 'termRenamed' || m.t === 'agents') ui(m.t, m);
   else if (m.t === 'rpc') {
     const fn = agent[m.method];
     Promise.resolve()
@@ -330,6 +330,7 @@ ipcMain.on('input', (_e, m) => toBackend(typeof m === 'string' ? { t: 'input', i
 ipcMain.on('resize', (_e, s) => toBackend({ t: 'resize', ...s }));
 ipcMain.on('termNew', (_e, kind) => toBackend({ t: 'new', kind }));
 ipcMain.on('termClose', (_e, id) => toBackend({ t: 'close', id }));
+ipcMain.on('termRename', (_e, m) => toBackend({ t: 'rename', id: m.id, name: m.name }));
 ipcMain.on('termFocus', (_e, id) => { activeTerm = id; });
 ipcMain.on('board', (_e, on) => { boardOpen = on; layout(); });
 ipcMain.on('sheet', (_e, on) => { sheetOpen = on; layout(); });
