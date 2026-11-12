@@ -2,7 +2,7 @@
 
 <h1 align="center">terminal-cowork</h1>
 
-<p align="center">Claude Code and a real browser in one window, on Windows with WSL.</p>
+<p align="center">Claude Code and a real browser in one window, on Windows with WSL and on macOS.</p>
 
 You and Claude share the same browser. Claude opens pages, clicks, types and reads errors while you watch, and you can step in at any moment. Everything Claude makes appears right beside the chat.
 
@@ -55,6 +55,24 @@ The build is not code signed, so Windows SmartScreen may warn on first launch.
 Under Appearance, Terminals, pick **Windows** instead of WSL; the app restarts. Terminals then open in PowerShell 7 (or Windows PowerShell), and Claude Code and Grok start from there, so they need to be installed on Windows. The build carries its own copy of the backend, and the app runs it on its own binary, so no separate Node.js is needed. Claude reaches the window over a named pipe, and every request carries a per-session token, because other local accounts can open a pipe. PDF previews use the built-in viewer when `pdftoppm` is missing, and Excel previews need Python 3 with `openpyxl` (`py` or `python`).
 
 Native Windows is newer and less tested than WSL. Reports are welcome in [issue #1](https://github.com/leamariek/terminal-cowork/issues/1).
+
+### macOS
+
+On a Mac the window, the backend and the terminals all run directly on macOS, from the cloned folder.
+
+- macOS on Apple silicon or Intel, Node.js 22 or later (`brew install node`) and [Claude Code](https://code.claude.com)
+- Optional: `brew install poppler` for page-by-page PDF previews (otherwise the built-in PDF viewer shows them), `pip3 install openpyxl` for Excel previews
+
+```sh
+git clone https://github.com/leamariek/terminal-cowork.git
+cd terminal-cowork
+npm install
+node scripts/vendor.mjs
+ln -sf "$PWD/bin/terminal-cowork.js" ~/.local/bin/terminal-cowork
+terminal-cowork
+```
+
+Run `terminal-cowork` in any folder to open the app there. Terminals start in your login shell (`$SHELL`, zsh by default), so your PATH and Claude Code are found as usual. Claude reaches the window over a socket in your private temp folder (`$TMPDIR/cowork.sock`). Shortcuts use Command instead of Control: Cmd+L, Cmd+T, Cmd+W and Cmd+R in the browser, Cmd+C and Cmd+V in a terminal (Ctrl+C always interrupts), Cmd+Shift+T for a new Claude Code session and Cmd+, for Appearance. Ctrl+Tab still switches tabs. Startup problems are written to `~/Library/Application Support/terminal-cowork/backend.log`.
 
 ## Shortcuts
 

@@ -2,11 +2,12 @@
 // native Windows over a named pipe. A pipe can be opened by other local accounts, so there every request carries the
 // session's random token (COWORK_TOKEN, inherited by the terminals, hooks and MCP server the app starts).
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export function socketPath() {
   if (process.env.COWORK_SOCK) return process.env.COWORK_SOCK;
-  const base = process.env.XDG_RUNTIME_DIR;
+  const base = process.env.XDG_RUNTIME_DIR ?? (process.platform === 'darwin' ? tmpdir() : undefined);   // macOS: the private per-user temp folder.
   if (!base) throw new Error('XDG_RUNTIME_DIR is not set, so there is no private place for the socket');
   return join(base, 'cowork.sock');
 }

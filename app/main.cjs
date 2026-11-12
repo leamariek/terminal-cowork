@@ -1,5 +1,5 @@
 // The window: chrome, real browser tabs, and the bridge to the backend inside WSL.
-const { app, BrowserWindow, ClipboardItem, WebContentsView, clipboard, dialog, ipcMain, nativeImage, session, shell } = require('electron');
+const { app, BrowserWindow, ClipboardItem, Menu, WebContentsView, clipboard, dialog, ipcMain, nativeImage, session, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const { appendFileSync, existsSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
@@ -12,6 +12,7 @@ const LOG_LIMIT = 300;
 if (TEST) app.commandLine.appendSwitch('no-sandbox');
 if (TEST && process.env.COWORK_HOST_RULES) app.commandLine.appendSwitch('host-resolver-rules', process.env.COWORK_HOST_RULES);
 const PLAIN = process.env.COWORK_PLAIN === '1'; // Terminal only, used to film the launch command.
+const MAC = process.platform === 'darwin';
 
 let win;
 let backend;
@@ -28,7 +29,7 @@ const current = () => tabs.find((t) => t.id === active);
 // ---- Backend ----
 
 // Where terminals run. On Windows the person picks WSL (the build writes config.json for it) or native Windows;
-// on Linux the backend simply runs here. The choice is kept per user and takes effect on the next start.
+// on Linux and macOS the backend simply runs here. The choice is kept per user and takes effect on the next start.
 const wslConfig = () => { const f = path.join(__dirname, 'config.json'); return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null; };
 const modeFile = () => path.join(app.getPath('userData'), 'backend.json');
 function backendMode() {
@@ -38,7 +39,7 @@ function backendMode() {
   if (chosen === 'windows' || (chosen === 'wsl' && wslConfig())) return chosen;
   return wslConfig() ? 'wsl' : 'windows';
 }
-// The packaged app carries a copy of the backend for native Windows; a checkout runs the one next to app/.
+// The packaged app carries a copy of the backend for native Windows and macOS; a checkout runs the one next to app/.
 const nativeBackend = () => (app.isPackaged ? path.join(process.resourcesPath, 'native', 'backend', 'server.js') : path.join(__dirname, '../backend/server.js'));
 
 function startBackend() {
@@ -55,7 +56,10 @@ function startBackend() {
     : mode === 'windows'
       // The app's own binary runs the backend as plain Node, so Windows needs no separate Node install.
       ? spawn(process.execPath, [nativeBackend()], { stdio: 'pipe', windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ...(startFolder ? { COWORK_CWD: startFolder } : {}) } })
-      : spawn(process.env.COWORK_NODE ?? 'node', [path.join(__dirname, '../backend/server.js')], { stdio: 'pipe' });
+      // macOS apps opened from the Finder or Dock get no shell PATH, so without COWORK_NODE the app's own binary runs it.
+      : MAC && !process.env.COWORK_NODE
+        ? spawn(process.execPath, [nativeBackend()], { stdio: 'pipe', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ...(startFolder ? { COWORK_CWD: startFolder } : {}) } })
+        : spawn(process.env.COWORK_NODE ?? 'node', [path.join(__dirname, '../backend/server.js')], { stdio: 'pipe' });
   const logFile = path.join(app.getPath('userData'), 'backend.log');
   const note = (text) => { try { appendFileSync(logFile, `${new Date().toISOString()} ${text}\n`); } catch { /* Logging must never stop the app. */ } };
   backend.stderr.on('data', (d) => note(d.toString()));
@@ -153,9 +157,10 @@ function closeTab(id) {
   else pushState();
 }
 
+// Command on macOS, Control elsewhere; Ctrl+Tab stays Ctrl+Tab everywhere, as in Safari and Chrome.
 function shortcut(input) {
-  if (!input.control) return false;
   const key = input.key.toLowerCase();
+  if (key === 'tab' ? !input.control : !(MAC ? input.meta : input.control)) return false;
   if (key === 'l') ui('focusAddress');
   else if (key === 't') switchTo(newTab().id);
   else if (key === 'w') closeTab(active);
@@ -440,7 +445,18 @@ function startRecorder(dir) {
   tick();
 }
 
+// macOS: no menu means Electron's default one, whose Cmd+R reloads this window (and starts every terminal again)
+// and whose Cmd+W closes it. Edit roles keep Cmd+C, Cmd+V and friends working in the address bar and in pages.
+function macMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'appMenu', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+    { role: 'editMenu' },
+    { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
+  ]));
+}
+
 app.whenReady().then(() => {
+  if (MAC) macMenu();
   // Web pages get nothing sensitive by default: no camera, microphone, location or notifications.
   session.fromPartition('persist:cowork').setPermissionRequestHandler((_wc, permission, done) => done(['clipboard-sanitized-write', 'fullscreen'].includes(permission)));
   session.fromPartition('persist:cowork').webRequest.onCompleted((d) => {
