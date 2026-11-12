@@ -1,6 +1,7 @@
 // The window's interface: terminal, toolbar and tab strip. All real work happens in main.cjs.
 const { send, on } = window.cowork;
 const $ = (id) => document.getElementById(id);
+const MAC = window.cowork.platform === 'darwin';
 
 // ---- Terminals ----
 
@@ -50,6 +51,15 @@ function addTerminal({ id, kind, name }) {
     // Paste keys skip xterm and keep the browser's default action: Chromium's native paste reads every clipboard
     // format Windows apps write and hands the text to xterm's own paste handler (bracketed paste included).
     if (e.shiftKey && !e.ctrlKey && e.key === 'Insert') return false;
+    // macOS: Command copies, pastes and starts sessions; every Control key belongs to the terminal, so Ctrl+C interrupts.
+    if (MAC) {
+      if (!e.metaKey || e.ctrlKey || e.altKey) return true;
+      if (k === 'c') return take(copy);
+      if (k === 'v') return take(() => send('paste', id));   // Like right-click: text, or Ctrl+V on to Claude Code for a screenshot.
+      if (e.shiftKey && k === 't') return take(() => send('termNew', 'claude'));
+      if (e.key === ',') return take(openAppearance);
+      return true;
+    }
     if (!e.ctrlKey || e.altKey) return true;
     if (k === 'c' && (e.shiftKey || xterm.hasSelection())) return take(copy);
     if (k === 'v') return false;
@@ -482,6 +492,6 @@ $('tint').addEventListener('input', () => {
 });
 $('tint').addEventListener('change', () => send('appearance', { tint: $('tint').value / 100 }));
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === ',') { e.preventDefault(); openAppearance(); }
+  if ((MAC ? e.metaKey : e.ctrlKey) && e.key === ',') { e.preventDefault(); openAppearance(); }
   else if (e.key === 'Escape' && !$('sheet-veil').hidden) { e.preventDefault(); closeAppearance(); }
 });

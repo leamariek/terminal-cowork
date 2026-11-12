@@ -1,11 +1,12 @@
 // Runs inside WSL (or Linux), or natively on Windows when the person picks that. Owns the terminals and the agent
 // socket, and talks to the window over stdin and stdout.
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:net';
-import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { homedir, tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import pty from 'node-pty';
@@ -16,6 +17,7 @@ import { socketPath } from '../src/rpc.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const WIN = process.platform === 'win32';
+const MAC = process.platform === 'darwin';
 // Started through the Electron binary (ELECTRON_RUN_AS_NODE): only this process needs that, terminals must not inherit it.
 delete process.env.ELECTRON_RUN_AS_NODE;
 // Native Windows: a per-session named pipe and token, set before the first terminal so hooks and MCP inherit both.
@@ -23,9 +25,17 @@ if (WIN) {
   process.env.COWORK_SOCK = `\\\\.\\pipe\\terminal-cowork-${randomBytes(8).toString('hex')}`;
   process.env.COWORK_TOKEN = randomBytes(24).toString('hex');
 }
+// macOS has no XDG_RUNTIME_DIR: the per-user temp folder is private (0700) and short enough for a socket path.
+// node-pty's prebuilt spawn-helper can arrive without its execute bit, and then no terminal starts.
+if (MAC) {
+  process.env.COWORK_SOCK ??= join(tmpdir(), 'cowork.sock');
+  const helper = join(dirname(createRequire(import.meta.url).resolve('node-pty')), '..', 'prebuilds', `darwin-${process.arch}`, 'spawn-helper');
+  try { accessSync(helper, constants.X_OK); } catch { try { chmodSync(helper, 0o755); } catch { /* Built from source: no prebuilt helper. */ } }
+}
 // PowerShell 7 when installed, otherwise the Windows PowerShell every Windows has.
 const winShell = () => { try { execFileSync('where.exe', ['pwsh'], { stdio: 'ignore', windowsHide: true }); return 'pwsh.exe'; } catch { return 'powershell.exe'; } };
-const shellFile = WIN ? winShell() : 'bash';
+// The person's own shell on macOS (zsh by default), so their profile sets PATH; bash elsewhere.
+const shellFile = WIN ? winShell() : MAC ? process.env.SHELL || '/bin/zsh' : 'bash';
 const stateDir = join(dataDir, 'state');
 mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 if (process.env.COWORK_WINDOWS === '1') {
@@ -35,6 +45,7 @@ if (process.env.COWORK_WINDOWS === '1') {
 
 const send = (msg) => process.stdout.write(JSON.stringify(msg) + '\n');
 const quote = (a) => `'${a.replace(/'/g, WIN ? "''" : `'\\''`)}'`;   // PowerShell doubles a single quote.
+const relogin = `exec ${MAC ? quote(shellFile) : 'bash'} -l`;
 
 // Every terminal is its own PTY. The first one starts Claude Code, later ones are whatever the person adds.
 const terms = new Map();
@@ -57,10 +68,10 @@ function addTerminal(kind, opts = {}) {
   const grokHome = kind === 'grok' ? { GROK_HOME: prepareGrok(root) } : {};
   const r = opts.resume ?? {};
   const resume = r.claude ? ['--resume', r.claude, ...(r.working ? ['The app restarted while you were working. Continue where you left off.'] : [])] : [];
-  const tail = WIN ? '' : '; exec bash -l', run = WIN ? '& ' : '';   // Bash keeps a shell after the agent exits; PowerShell uses -NoExit.
+  const tail = WIN ? '' : `; ${relogin}`, run = WIN ? '& ' : '';   // Bash keeps a shell after the agent exits; PowerShell uses -NoExit.
   const command = kind === 'claude' ? process.env.COWORK_SHELL_COMMAND ?? `${run}claude ${[...claudeFlags(root), ...resume].map(quote).join(' ')}${tail}`
     : kind === 'grok' ? `${run}grok${tail}`
-      : WIN ? '' : r.tmux ? `tmux attach -t ${quote(r.tmux)}${tail}` : 'exec bash -l';
+      : WIN ? '' : r.tmux ? `tmux attach -t ${quote(r.tmux)}${tail}` : relogin;
   const args = !WIN ? ['-lic', command] : command ? ['-NoLogo', '-NoExit', '-Command', command] : ['-NoLogo'];
   const name = opts.name ?? nameFor(kind);
   const proc = pty.spawn(shellFile, args, {
@@ -79,10 +90,29 @@ function addTerminal(kind, opts = {}) {
 // ---- Continue after a restart or an update: what each terminal holds is written down and reopened on the next start. ----
 
 const restoreFile = join(dataDir, 'restore.json');
-const childrenOf = (pid) => { try { return readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim().split(/\s+/).filter(Boolean).map(Number); } catch { return []; } };
+// macOS has no /proc: one ps listing (kept for a second) gives parents and commands, lsof gives a folder.
+let psTable = { at: 0, rows: [] };
+const ps = () => {
+  if (Date.now() - psTable.at > 1000) {
+    let rows = [];
+    try { rows = execFileSync('ps', ['-axo', 'pid=,ppid=,comm='], { encoding: 'utf8', timeout: 1500 }).trim().split('\n').map((l) => { const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l); return m && { pid: +m[1], ppid: +m[2], comm: m[3] }; }).filter(Boolean); } catch { /* Next scan. */ }
+    psTable = { at: Date.now(), rows };
+  }
+  return psTable.rows;
+};
+const childrenOf = (pid) => {
+  if (MAC) return ps().filter((r) => r.ppid === pid).map((r) => r.pid);
+  try { return readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim().split(/\s+/).filter(Boolean).map(Number); } catch { return []; }
+};
 const descendants = (pid) => { const out = []; const walk = (p, depth) => { if (depth > 12) return; for (const c of childrenOf(p)) { out.push(c); walk(c, depth + 1); } }; walk(pid, 0); return out; };
-const cmdline = (pid) => { try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean); } catch { return []; } };
-const cwdOf = (pid) => { try { return readlinkSync(`/proc/${pid}/cwd`); } catch { return null; } };
+const cmdline = (pid) => {
+  if (MAC) { const r = ps().find((x) => x.pid === pid); return r ? [r.comm] : []; }
+  try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean); } catch { return []; }
+};
+const cwdOf = (pid) => {
+  if (MAC) { try { return /^n(.+)$/m.exec(execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], { encoding: 'utf8', timeout: 1500, stdio: ['ignore', 'pipe', 'ignore'] }))?.[1] ?? null; } catch { return null; } }
+  try { return readlinkSync(`/proc/${pid}/cwd`); } catch { return null; }
+};
 function tmuxClients() {
   try { return new Map(execFileSync('tmux', ['list-clients', '-F', '#{client_pid} #{session_name}'], { encoding: 'utf8', timeout: 1500, stdio: ['ignore', 'pipe', 'ignore'] }).trim().split('\n').filter(Boolean).map((l) => { const i = l.indexOf(' '); return [Number(l.slice(0, i)), l.slice(i + 1)]; })); } catch { return new Map(); }
 }
@@ -130,7 +160,7 @@ function closed(id) {
 // The board: the app's own agent terminals (live state from hooks) plus every other Claude Code session on this
 // machine, read from Claude Code's records. Each card carries that session's background work.
 let sessions = [];
-const parentOf = (pid) => { try { const st = readFileSync(`/proc/${pid}/stat`, 'utf8'); return Number(st.slice(st.lastIndexOf(')') + 2).split(' ')[1]); } catch { return 0; } };
+const parentOf = (pid) => { if (MAC) return ps().find((r) => r.pid === pid)?.ppid ?? 0; try { const st = readFileSync(`/proc/${pid}/stat`, 'utf8'); return Number(st.slice(st.lastIndexOf(')') + 2).split(' ')[1]); } catch { return 0; } };
 function terminalOf(pid) {
   const shells = new Map([...terms.values()].map((t) => [t.proc.pid, t.id]));
   for (let p = pid, hops = 0; p > 1 && hops < 40; p = parentOf(p), hops++) if (shells.has(p)) return shells.get(p);

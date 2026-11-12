@@ -16,6 +16,11 @@ const asNode = Boolean(process.versions.electron);
 function nodeCommand() {
   if (!asNode) return process.execPath;
   mkdirSync(dataDir, { recursive: true });
+  if (process.platform !== 'win32') {   // The macOS app runs its backend the same way.
+    const launcher = join(dataDir, 'node.sh');
+    writeFileSync(launcher, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec '${process.execPath.replace(/'/g, `'\\''`)}' "$@"\n`, { mode: 0o755 });
+    return launcher;
+  }
   const launcher = join(dataDir, 'node.cmd');
   writeFileSync(launcher, `@set ELECTRON_RUN_AS_NODE=1\r\n@"${process.execPath}" %*\r\n`);
   return launcher;

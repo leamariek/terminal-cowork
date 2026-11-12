@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// terminal-cowork: opens the app from any WSL terminal, in the folder you are in.
+// terminal-cowork: opens the app from any WSL or macOS terminal, in the folder you are in.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +12,19 @@ const root = resolve(dirname(realpathSync(fileURLToPath(import.meta.url))), '..'
 if (process.env.TERMINAL_COWORK_ELECTRON) {
   const args = [resolve(root, 'app'), '--no-sandbox', ...(process.env.TERMINAL_COWORK_ARGS ?? '').split(' ').filter(Boolean)];
   spawn(process.env.TERMINAL_COWORK_ELECTRON, args, { detached: true, stdio: 'ignore', env: { ...process.env, COWORK_CWD: process.cwd() } }).unref();
+  console.log('Opening terminal-cowork');
+  process.exit(0);
+}
+
+// macOS: the checkout's own Electron opens the window, and the backend runs on this same Node, whatever PATH the app sees.
+if (process.platform === 'darwin') {
+  const require = createRequire(import.meta.url);
+  let electron;
+  try { electron = require(resolve(root, 'node_modules/electron')); } catch {
+    console.error('Electron is not installed. Run "npm install" in the terminal-cowork folder first.');
+    process.exit(1);
+  }
+  spawn(electron, [resolve(root, 'app'), `--cwd=${process.cwd()}`], { detached: true, stdio: 'ignore', env: { ...process.env, COWORK_NODE: process.execPath, COWORK_CWD: process.cwd() } }).unref();
   console.log('Opening terminal-cowork');
   process.exit(0);
 }
