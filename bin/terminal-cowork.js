@@ -24,7 +24,7 @@ if (process.platform === 'darwin') {
     console.error('Electron is not installed. Run "npm install" in the terminal-cowork folder first.');
     process.exit(1);
   }
-  spawn(electron, [resolve(root, 'app'), `--cwd=${process.cwd()}`], { detached: true, stdio: 'ignore', env: { ...process.env, COWORK_NODE: process.execPath } }).unref();
+  spawn(electron, [resolve(root, 'app'), `--cwd=${process.cwd()}`], { detached: true, stdio: 'ignore', env: { ...process.env, COWORK_NODE: process.execPath, COWORK_CWD: process.cwd() } }).unref();
   console.log('Opening terminal-cowork');
   process.exit(0);
 }
